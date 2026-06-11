@@ -61,13 +61,15 @@ def test_table_helpers_use_prefixed_names():
 
 def test_load_validator_reads_schema_from_repo_root(tmp_path, monkeypatch):
     schema_file = tmp_path / "schema.json"
-    schema_file.write_text('{"type": "object", "properties": {"name": {"type": "string"}}}')
+    schema_file.write_text(
+        '{"type": "object", "properties": {"amount": {"type": "number", "multipleOf": 0.01}}}'
+    )
 
     monkeypatch.setattr(common, "REPO_ROOT", tmp_path)
 
     validator = common.load_validator("schema.json")
 
-    assert validator.schema["properties"]["name"]["type"] == "string"
+    assert validator.schema["properties"]["amount"]["multipleOf"] == Decimal("0.01")
 
 
 def test_normalize_record_and_validate_record():

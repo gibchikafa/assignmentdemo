@@ -159,7 +159,7 @@ def resolve_repo_file(file_path: str) -> Path:
 
 def load_validator(schema_file: str) -> Draft7Validator:
     with open(resolve_repo_file(schema_file), "r") as f:
-        return Draft7Validator(json.load(f))
+        return Draft7Validator(json.load(f, parse_float=Decimal))
 
 
 def normalize_record(record: dict) -> dict:
