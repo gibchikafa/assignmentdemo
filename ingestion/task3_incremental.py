@@ -1,5 +1,6 @@
-from pathlib import Path
 import sys
+sys.dont_write_bytecode = True
+from pathlib import Path
 
 
 def add_repo_root_to_path() -> None:

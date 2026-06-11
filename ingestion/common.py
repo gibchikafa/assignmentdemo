@@ -9,6 +9,7 @@ import pycountry
 from dateutil.parser import isoparse
 from dlt.sources.rest_api import rest_api_source
 from jsonschema import Draft7Validator
+from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     BooleanType,
     DecimalType,
@@ -20,6 +21,7 @@ from pyspark.sql.types import (
 
 
 API_BASE_URL = "https://fgbjekjqnbmtkmeewexb.supabase.co/rest/v1/"
+spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
 
 NATURAL_KEY_COLUMNS = [
     "account_id",
