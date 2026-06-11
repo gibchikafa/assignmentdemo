@@ -11,7 +11,7 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 - `ingestion/common.py` - Shared normalization, validation, duplicate detection, quarantine routing, watermark handling, and Delta merge logic.
 - `ingestion/cli.py` - Shared argument definitions for all ingestion entrypoints.
 - `ddl/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, and control tables.
-- `ddl/daily_account_summary.sql` - Spark SQL template for the Task 2 gold model.
+- `sql/daily_account_summary.sql` - Spark SQL template for the Task 2 gold model.
 - `outputs/` - Submission artifacts such as quarantine samples and watermark snapshots.
 
 ## Implementation Summary
@@ -194,9 +194,9 @@ If you already created the old unpartitioned tables, drop and recreate them to a
 - The run-log table captures batch metadata such as counts, watermark value, and status.
 - Default `--source-file` and `--schema-file` values point at the repo root; relative overrides are also resolved against the repo root if needed.
 - `ddl/bronze_tables.sql` is for table setup or recreation, not for normal pipeline runs.
-- `ddl/daily_account_summary.sql` is the Spark SQL model used by Task 2.
+- `sql/daily_account_summary.sql` is the Spark SQL model used by Task 2.
 - The Task 2 output table lives in `workspace.gold.daily_account_summary` by default.
-- `sql/` contains only the Task 2 runner script.
+- `sql/` contains the Task 2 runner script and its SQL template.
 
 ## Unit Tests
 

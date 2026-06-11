@@ -49,7 +49,7 @@ def add_task2_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--output-table", default="daily_account_summary")
     parser.add_argument(
         "--sql-template",
-        default=str(REPO_ROOT / "ddl" / "daily_account_summary.sql"),
+        default=str(REPO_ROOT / "sql" / "daily_account_summary.sql"),
     )
 
 

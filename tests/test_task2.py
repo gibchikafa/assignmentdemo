@@ -12,7 +12,7 @@ def make_args(**overrides):
         "quarantine_table": "gibson_eletrolux_quarantine_test",
         "output_dataset": "gold",
         "output_table": "daily_account_summary",
-        "sql_template": "ddl/daily_account_summary.sql",
+        "sql_template": "sql/daily_account_summary.sql",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -32,7 +32,7 @@ def test_task2_parser_defaults():
     assert args.quarantine_table == "gibson_eletrolux_quarantine_test"
     assert args.output_dataset == "gold"
     assert args.output_table == "daily_account_summary"
-    assert args.sql_template.endswith("ddl/daily_account_summary.sql")
+    assert args.sql_template.endswith("sql/daily_account_summary.sql")
 
 
 def test_render_daily_account_summary_sql_includes_assignment_rules():
