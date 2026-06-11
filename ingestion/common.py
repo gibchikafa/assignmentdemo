@@ -302,6 +302,23 @@ def load_existing_duplicate_reference(transactions_table: str):
     )
 
 
+def load_existing_transaction_ids(args) -> set[str]:
+    existing_transaction_ids: set[str] = set()
+
+    for table_name in (args.transactions_table, args.quarantine_table):
+        full_table_name = table_fqn(args, table_name)
+        rows = spark.sql(
+            f"""
+            SELECT transaction_id
+            FROM {full_table_name}
+            WHERE transaction_id IS NOT NULL
+            """
+        ).collect()
+        existing_transaction_ids.update(row["transaction_id"] for row in rows)
+
+    return existing_transaction_ids
+
+
 def flag_duplicates(staged_df, transactions_table: str):
     empty_string_array = F.expr("CAST(array() AS ARRAY<STRING>)")
     previous_transactions_window = (
@@ -519,6 +536,11 @@ def iter_source_records(args, use_watermark: bool):
     start_value = watermark_start_value(args) if use_watermark else None
     include_boundary = watermark_includes_boundary(args) if use_watermark else True
     boundary = parse_output_timestamp(start_value) if start_value else None
+    existing_transaction_ids = (
+        load_existing_transaction_ids(args)
+        if args.source_type == "file" and boundary is not None
+        else set()
+    )
 
     if args.source_type == "file":
         for record in iter_file_records(args.source_file):
@@ -536,6 +558,8 @@ def iter_source_records(args, use_watermark: bool):
                     else:
                         if tx_date <= boundary:
                             continue
+                elif record.get("transaction_id") in existing_transaction_ids:
+                    continue
 
             yield record
 

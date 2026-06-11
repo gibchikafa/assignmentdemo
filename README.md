@@ -126,6 +126,7 @@ Why this design:
 - Using the same watermark table for both file and REST sources keeps the behavior consistent across source types.
 - The REST path uses `dlt`/dlthub so the API integration stays declarative. Pagination, headers, and the `transaction_date` filter live in `supabase_transactions_source`, which keeps source-specific concerns isolated from validation, duplicate handling, and Delta writes. That makes the REST source easier to extend or replace later without changing the pipeline core.
 - Task 3 inherits the same validation and duplicate logic as Task 1, so incremental behavior only changes which records are selected, not how each record is judged.
+- For file sources, a rerun after the basic load is idempotent: rows already written to bronze or quarantine are skipped even if their `transaction_date` is malformed and cannot be compared to the watermark.
 
 Run it with the Task 3 entrypoint:
 
