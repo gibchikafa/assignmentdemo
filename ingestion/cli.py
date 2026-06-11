@@ -23,7 +23,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
 def add_incremental_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--watermark-table", default="ingestion_watermark_test")
     parser.add_argument("--source-name", default="transactions")
-    parser.add_argument("--lookback-days", type=int, default=2)
+    parser.add_argument("--lookback-days", type=int, default=0)
 
 
 def build_parser(include_incremental: bool) -> argparse.ArgumentParser:

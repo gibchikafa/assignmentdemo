@@ -261,9 +261,13 @@ def watermark_start_value(args):
     if watermark is None:
         return None
 
-    lookback_days = getattr(args, "lookback_days", 2)
+    lookback_days = getattr(args, "lookback_days", 0)
     start = watermark - timedelta(days=lookback_days)
     return start.isoformat().replace("+00:00", "Z")
+
+
+def watermark_includes_boundary(args) -> bool:
+    return getattr(args, "lookback_days", 0) > 0
 
 
 def update_watermark(args, valid_records: list[dict]):
@@ -303,14 +307,17 @@ def update_watermark(args, valid_records: list[dict]):
     """)
 
 
-def supabase_transactions_source(api_key: str, start_value: str | None):
+def supabase_transactions_source(
+    api_key: str, start_value: str | None, include_boundary: bool = True
+):
     if not api_key:
         raise ValueError("Pass --api-key or set SUPABASE_API_KEY")
 
     params = {"order": "transaction_date.asc"}
 
     if start_value:
-        params["transaction_date"] = f"gte.{start_value}"
+        op = "gte" if include_boundary else "gt"
+        params["transaction_date"] = f"{op}.{start_value}"
 
     return rest_api_source(
         {
@@ -361,6 +368,7 @@ def iter_file_records(source_file: str):
 
 def iter_source_records(args, use_watermark: bool):
     start_value = watermark_start_value(args) if use_watermark else None
+    include_boundary = watermark_includes_boundary(args) if use_watermark else True
 
     if args.source_type == "file":
         for record in iter_file_records(args.source_file):
@@ -368,13 +376,20 @@ def iter_source_records(args, use_watermark: bool):
 
             if start_value:
                 tx_date = isoparse(record["transaction_date"])
-                if tx_date < isoparse(start_value):
-                    continue
+                boundary = isoparse(start_value)
+                if include_boundary:
+                    if tx_date < boundary:
+                        continue
+                else:
+                    if tx_date <= boundary:
+                        continue
 
             yield record
 
     elif args.source_type == "rest":
-        source = supabase_transactions_source(args.api_key, start_value)
+        source = supabase_transactions_source(
+            args.api_key, start_value, include_boundary=include_boundary
+        )
         yield from source.resources["transactions"]
 
 
