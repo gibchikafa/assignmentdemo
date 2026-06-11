@@ -585,9 +585,7 @@ def run_pipeline(args, use_watermark: bool):
     run_id = uuid.uuid4().hex
     started_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-    staged_df = split_records(
-        args, validator, use_watermark=use_watermark
-    ).cache()
+    staged_df = split_records(args, validator, use_watermark=use_watermark)
 
     summary_row = staged_df.agg(
         F.count(F.lit(1)).alias("input_records"),
@@ -671,4 +669,3 @@ def run_pipeline(args, use_watermark: bool):
         print(f"  Watermark  : {watermark_table_fqn(args)}")
 
     print("=========================================")
-    staged_df.unpersist()
