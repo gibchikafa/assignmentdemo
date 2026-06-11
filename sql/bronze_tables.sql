@@ -1,6 +1,6 @@
-CREATE SCHEMA IF NOT EXISTS main.bronze;
+CREATE SCHEMA IF NOT EXISTS workspace.bronze;
 
-CREATE TABLE IF NOT EXISTS main.bronze.transactions_test (
+CREATE TABLE IF NOT EXISTS workspace.bronze.transactions_test (
   transaction_id STRING,
   account_id STRING,
   transaction_date TIMESTAMP,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS main.bronze.transactions_test (
 )
 USING DELTA;
 
-CREATE TABLE IF NOT EXISTS main.bronze.quarantine_test (
+CREATE TABLE IF NOT EXISTS workspace.bronze.quarantine_test (
   transaction_id STRING,
   account_id STRING,
   transaction_date TIMESTAMP,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS main.bronze.quarantine_test (
 )
 USING DELTA;
 
-CREATE TABLE IF NOT EXISTS main.bronze.ingestion_watermark_test (
+CREATE TABLE IF NOT EXISTS workspace.bronze.ingestion_watermark_test (
   source_name STRING,
   last_successful_transaction_date TIMESTAMP,
   updated_at TIMESTAMP

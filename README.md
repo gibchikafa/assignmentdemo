@@ -56,7 +56,7 @@ python3 entrypoint.py --pipeline incremental --source-type file --source-file tr
 
 ## DDL
 
-Run `sql/bronze_tables.sql` before the ingestion scripts to pre-create the Unity Catalog tables under `main.bronze`.
+Run `sql/bronze_tables.sql` before the ingestion scripts to pre-create the Unity Catalog tables under `workspace.bronze`.
 The ingestion code assumes the target tables already exist and does not create schemas or tables at runtime.
 
 ## Notes
@@ -65,4 +65,4 @@ The ingestion code assumes the target tables already exist and does not create s
 - The ingestion timestamp and watermark timestamps are written as UTC timestamps.
 - `entrypoint.py` accepts the union of Task 1 and Task 3 arguments and switches behavior with `--pipeline basic|incremental`.
 - Default `--source-file` and `--schema-file` values point at the repo root; relative overrides are also resolved against the repo root if needed.
-- Default target tables are fully qualified as `main.bronze.<table>` unless you override `--catalog` or `--dataset`.
+- Default target tables are fully qualified as `workspace.bronze.<table>` unless you override `--catalog` or `--dataset`.
