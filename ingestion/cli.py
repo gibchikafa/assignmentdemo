@@ -16,13 +16,15 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument("--catalog", default="workspace")
     parser.add_argument("--dataset", default="bronze")
-    parser.add_argument("--transactions-table", default="transactions_test")
-    parser.add_argument("--quarantine-table", default="quarantine_test")
-    parser.add_argument("--control-table", default="ingestion_run_log_test")
+    parser.add_argument("--transactions-table", default="gibson_eletrolux_transactions_test")
+    parser.add_argument("--quarantine-table", default="gibson_eletrolux_quarantine_test")
+    parser.add_argument("--control-table", default="gibson_eletrolux_ingestion_run_log_test")
 
 
 def add_incremental_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--watermark-table", default="ingestion_watermark_test")
+    parser.add_argument(
+        "--watermark-table", default="gibson_eletrolux_ingestion_watermark_test"
+    )
     parser.add_argument("--source-name", default="transactions")
     parser.add_argument(
         "--lookback-hours",

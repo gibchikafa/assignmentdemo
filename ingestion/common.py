@@ -62,7 +62,14 @@ def table_fqn(args, table_name: str) -> str:
 
 
 def watermark_table_fqn(args) -> str:
-    return table_fqn(args, getattr(args, "watermark_table", "ingestion_watermark_test"))
+    return table_fqn(
+        args,
+        getattr(
+            args,
+            "watermark_table",
+            "gibson_eletrolux_ingestion_watermark_test",
+        ),
+    )
 
 
 def temp_view_name(full_table_name: str) -> str:
@@ -419,7 +426,11 @@ def append_run_log(args, run_summary: dict):
         [
             getattr(args, "catalog", "main"),
             getattr(args, "dataset", "bronze"),
-            getattr(args, "control_table", "ingestion_run_log_test"),
+            getattr(
+                args,
+                "control_table",
+                "gibson_eletrolux_ingestion_run_log_test",
+            ),
         ]
     )
     run_log_df.write.format("delta").mode("append").saveAsTable(run_log_table)

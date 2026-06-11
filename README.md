@@ -20,11 +20,12 @@ This repository implements Task 1 and Task 3 with a shared ingestion core. Task 
 - A successful basic load also advances the watermark, so a later incremental run starts from the latest processed transaction date.
 - The bronze transaction and quarantine tables are partitioned by `country_code` to support pruning on a common business dimension.
 - Each successful run appends metadata to a run-log table so the submission has an auditable control trail.
+- All managed tables are prefixed with `gibson_eletrolux_` to keep the namespace isolated and unambiguous.
 - `entrypoint.py` defaults to Task 1/basic ingestion when `--pipeline` is omitted.
 
 ## Task 1: Basic Ingestion
 
-Task 1 is the full ingest path. It reads every record from the source, normalizes each record to the final schema, validates the payload, quarantines invalid rows with an `error_reason`, and flags duplicates using a natural-key hash. Valid rows are written to the bronze transactions table.
+Task 1 is the full ingest path. It reads every record from the source, normalizes each record to the final schema, validates the payload, quarantines invalid rows with an `error_reason`, and flags duplicates using a natural-key hash. Valid rows are written to `workspace.bronze.gibson_eletrolux_transactions_test`.
 
 Why this design:
 
@@ -62,7 +63,7 @@ python3 entrypoint.py --source-type file --source-file transactions.csv
 
 ## Task 3: Incremental Ingestion
 
-Task 3 extends the same core pipeline with watermark-based filtering. Before ingesting, it reads the last successful transaction date from `workspace.bronze.ingestion_watermark_test`. The default `--lookback-hours` is `0`, so the incremental run only processes records newer than the saved watermark. For REST sources, the lower bound is pushed down to the API. For file sources, the filter is applied locally. After a successful load, the watermark is advanced to the latest processed transaction date.
+Task 3 extends the same core pipeline with watermark-based filtering. Before ingesting, it reads the last successful transaction date from `workspace.bronze.gibson_eletrolux_ingestion_watermark_test`. The default `--lookback-hours` is `0`, so the incremental run only processes records newer than the saved watermark. For REST sources, the lower bound is pushed down to the API. For file sources, the filter is applied locally. After a successful load, the watermark is advanced to the latest processed transaction date.
 
 Why this design:
 
@@ -96,27 +97,27 @@ python3 entrypoint.py --pipeline incremental --source-type file --source-file tr
 5. Build a natural key and hash for duplicate detection.
 6. Compare against rows already in bronze and rows seen in the current batch.
 7. Mark duplicates with is_duplicate = true.
-8. Write valid rows to workspace.bronze.transactions_test.
-9. Write invalid rows to workspace.bronze.quarantine_test.
+8. Write valid rows to workspace.bronze.gibson_eletrolux_transactions_test.
+9. Write invalid rows to workspace.bronze.gibson_eletrolux_quarantine_test.
 10. Advance the watermark to the latest successful transaction date.
-11. Append run metadata to workspace.bronze.ingestion_run_log_test.
+11. Append run metadata to workspace.bronze.gibson_eletrolux_ingestion_run_log_test.
 ```
 
 ### Task 3
 
 ```text
-1. Read the saved watermark from workspace.bronze.ingestion_watermark_test.
+1. Read the saved watermark from workspace.bronze.gibson_eletrolux_ingestion_watermark_test.
 2. Compute the start boundary using --lookback-hours (default 0).
 3. Filter the source so only rows newer than the boundary are processed.
 4. Run the same normalization, validation, quarantine, and duplicate steps as Task 1.
 5. Write valid and quarantine rows to the bronze tables.
 6. Advance the watermark after a successful load.
-7. Append run metadata to workspace.bronze.ingestion_run_log_test.
+7. Append run metadata to workspace.bronze.gibson_eletrolux_ingestion_run_log_test.
 ```
 
 ## DDL
 
-If you need to recreate the tables, use `sql/bronze_tables.sql`. It creates the four Delta tables under `workspace.bronze`. The ingestion code assumes those tables already exist and does not create them at runtime.
+If you need to recreate the tables, use `sql/bronze_tables.sql`. It creates the four Delta tables under `workspace.bronze` with the `gibson_eletrolux_` prefix. The ingestion code assumes those tables already exist and does not create them at runtime.
 If you already created the old unpartitioned tables, drop and recreate them to apply the new partitioning and the run-log table.
 
 ## Notes

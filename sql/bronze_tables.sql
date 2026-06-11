@@ -1,6 +1,6 @@
 CREATE SCHEMA IF NOT EXISTS workspace.bronze;
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.transactions_test (
+CREATE TABLE IF NOT EXISTS workspace.bronze.gibson_eletrolux_transactions_test (
   transaction_id STRING,
   account_id STRING,
   transaction_date TIMESTAMP,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS workspace.bronze.transactions_test (
 USING DELTA
 PARTITIONED BY (country_code);
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.quarantine_test (
+CREATE TABLE IF NOT EXISTS workspace.bronze.gibson_eletrolux_quarantine_test (
   transaction_id STRING,
   account_id STRING,
   transaction_date TIMESTAMP,
@@ -39,14 +39,14 @@ CREATE TABLE IF NOT EXISTS workspace.bronze.quarantine_test (
 USING DELTA
 PARTITIONED BY (country_code);
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.ingestion_watermark_test (
+CREATE TABLE IF NOT EXISTS workspace.bronze.gibson_eletrolux_ingestion_watermark_test (
   source_name STRING,
   last_successful_transaction_date TIMESTAMP,
   updated_at TIMESTAMP
 )
 USING DELTA;
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.ingestion_run_log_test (
+CREATE TABLE IF NOT EXISTS workspace.bronze.gibson_eletrolux_ingestion_run_log_test (
   run_id STRING,
   pipeline STRING,
   source_type STRING,
