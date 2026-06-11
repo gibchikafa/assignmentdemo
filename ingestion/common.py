@@ -408,16 +408,16 @@ def watermark_includes_boundary(args) -> bool:
     return getattr(args, "lookback_hours", 0) > 0
 
 
-def update_watermark(args, valid_df):
+def update_watermark(args, staged_df):
     full_table = watermark_table_fqn(args)
 
-    max_row = valid_df.select(F.max("transaction_date").alias("max_transaction_date")).collect()[
+    max_row = staged_df.select(F.max("transaction_date").alias("max_transaction_date")).collect()[
         0
     ]
     max_tx_date = max_row["max_transaction_date"]
 
     if max_tx_date is None:
-        print("No valid records, watermark not updated")
+        print("No parseable transaction dates, watermark not updated")
         return
 
     if max_tx_date.tzinfo is None:
@@ -655,12 +655,12 @@ def run_pipeline(args, use_watermark: bool):
         include_error_reason=True,
     )
 
-    # Advance the watermark after every successful load so a later incremental
-    # run can continue from the latest processed transaction date.
-    update_watermark(args, valid_df)
+    # Advance the watermark from the whole processed batch so a later
+    # incremental run does not repeat quarantined-but-parseable rows.
+    update_watermark(args, staged_df)
 
     watermark_value = (
-        valid_df.select(F.max("transaction_date").alias("max_transaction_date"))
+        staged_df.select(F.max("transaction_date").alias("max_transaction_date"))
         .collect()[0]["max_transaction_date"]
     )
 

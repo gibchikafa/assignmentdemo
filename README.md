@@ -20,7 +20,7 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 - The code assumes the target tables already exist in Unity Catalog under `workspace.bronze`.
 - The pipeline does not create schemas or tables at runtime.
 - The shared implementation keeps Task 1 and Task 3 behavior aligned, so the only real difference is whether watermark filtering is enabled.
-- A successful basic load also advances the watermark, so a later incremental run starts from the latest processed transaction date.
+- A successful load advances the watermark from the latest parseable transaction date in the processed batch, so a later incremental run does not repeat quarantined-but-parseable rows.
 - The bronze transaction and quarantine tables are partitioned by `country_code` to support pruning on a common business dimension.
 - Each successful run appends metadata to a run-log table so the submission has an auditable control trail.
 - All managed tables are prefixed with `gibson_eletrolux_` to keep the namespace isolated and unambiguous.
@@ -126,7 +126,7 @@ Why this design:
 - Using the same watermark table for both file and REST sources keeps the behavior consistent across source types.
 - The REST path uses `dlt`/dlthub so the API integration stays declarative. Pagination, headers, and the `transaction_date` filter live in `supabase_transactions_source`, which keeps source-specific concerns isolated from validation, duplicate handling, and Delta writes. That makes the REST source easier to extend or replace later without changing the pipeline core.
 - Task 3 inherits the same validation and duplicate logic as Task 1, so incremental behavior only changes which records are selected, not how each record is judged.
-- For file sources, a rerun after the basic load is idempotent: rows already written to bronze or quarantine are skipped even if their `transaction_date` is malformed and cannot be compared to the watermark.
+- For file sources, a rerun after the basic load is idempotent for already-processed rows. Parsed dates are advanced through the watermark, and rows already written to bronze or quarantine are skipped even if their `transaction_date` is malformed and cannot be compared to the watermark.
 
 Run it with the Task 3 entrypoint:
 
