@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS workspace.bronze.transactions_test (
   natural_key_hash STRING,
   is_duplicate BOOLEAN
 )
-USING DELTA;
+USING DELTA
+PARTITIONED BY (country_code);
 
 CREATE TABLE IF NOT EXISTS workspace.bronze.quarantine_test (
   transaction_id STRING,
@@ -35,11 +36,31 @@ CREATE TABLE IF NOT EXISTS workspace.bronze.quarantine_test (
   is_duplicate BOOLEAN,
   error_reason STRING
 )
-USING DELTA;
+USING DELTA
+PARTITIONED BY (country_code);
 
 CREATE TABLE IF NOT EXISTS workspace.bronze.ingestion_watermark_test (
   source_name STRING,
   last_successful_transaction_date TIMESTAMP,
   updated_at TIMESTAMP
+)
+USING DELTA;
+
+CREATE TABLE IF NOT EXISTS workspace.bronze.ingestion_run_log_test (
+  run_id STRING,
+  pipeline STRING,
+  source_type STRING,
+  source_name STRING,
+  catalog_name STRING,
+  schema_name STRING,
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  input_records BIGINT,
+  valid_records BIGINT,
+  quarantine_records BIGINT,
+  duplicate_records BIGINT,
+  lookback_hours INT,
+  watermark_value TIMESTAMP,
+  status STRING
 )
 USING DELTA;

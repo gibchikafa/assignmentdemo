@@ -9,7 +9,7 @@ This repository implements Task 1 and Task 3 with a shared ingestion core. Task 
 - `entrypoint.py` - Unified Databricks entrypoint with `--pipeline basic|incremental`.
 - `ingestion/common.py` - Shared normalization, validation, duplicate detection, quarantine routing, watermark handling, and Delta merge logic.
 - `ingestion/cli.py` - Shared argument definitions for all ingestion entrypoints.
-- `sql/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, and watermark tables.
+- `sql/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, and control tables.
 - `outputs/` - Submission artifacts such as quarantine samples and watermark snapshots.
 
 ## Implementation Summary
@@ -18,6 +18,8 @@ This repository implements Task 1 and Task 3 with a shared ingestion core. Task 
 - The pipeline does not create schemas or tables at runtime.
 - The shared implementation keeps Task 1 and Task 3 behavior aligned, so the only real difference is whether watermark filtering is enabled.
 - A successful basic load also advances the watermark, so a later incremental run starts from the latest processed transaction date.
+- The bronze transaction and quarantine tables are partitioned by `country_code` to support pruning on a common business dimension.
+- Each successful run appends metadata to a run-log table so the submission has an auditable control trail.
 - `entrypoint.py` defaults to Task 1/basic ingestion when `--pipeline` is omitted.
 
 ## Task 1: Basic Ingestion
@@ -29,6 +31,7 @@ Why this design:
 - It keeps the basic load deterministic and easy to rerun.
 - Invalid records remain visible in quarantine instead of failing the whole batch.
 - Duplicate rows are flagged rather than removed so the output preserves lineage.
+- Duplicate detection is performed in Spark with a batch-order window and a lookup against the already ingested bronze table, which avoids driver-side duplicate state.
 - The write path matches the final target schema, which lets Task 3 reuse the same code.
 - The pipeline assumes the bronze tables are precreated, which avoids runtime schema creation and Hive Metastore fallback issues in Databricks serverless.
 
@@ -59,13 +62,13 @@ python3 entrypoint.py --source-type file --source-file transactions.csv
 
 ## Task 3: Incremental Ingestion
 
-Task 3 extends the same core pipeline with watermark-based filtering. Before ingesting, it reads the last successful transaction date from `workspace.bronze.ingestion_watermark_test`. The default `--lookback-days` is `0`, so the incremental run only processes records newer than the saved watermark. For REST sources, the lower bound is pushed down to the API. For file sources, the filter is applied locally. After a successful load, the watermark is advanced to the latest processed transaction date.
+Task 3 extends the same core pipeline with watermark-based filtering. Before ingesting, it reads the last successful transaction date from `workspace.bronze.ingestion_watermark_test`. The default `--lookback-hours` is `0`, so the incremental run only processes records newer than the saved watermark. For REST sources, the lower bound is pushed down to the API. For file sources, the filter is applied locally. After a successful load, the watermark is advanced to the latest processed transaction date.
 
 Why this design:
 
 - It lets the basic load and the incremental load share the same validation, quarantine, and write path.
-- A zero-day lookback makes the common "run Task 1, then run Task 3" flow safe and predictable.
-- Increasing `--lookback-days` remains available if late-arriving data needs a replay window.
+- A zero-hour lookback makes the common "run Task 1, then run Task 3" flow safe and predictable.
+- Increasing `--lookback-hours` remains available if late-arriving data needs a replay window.
 - Using the same watermark table for both file and REST sources keeps the behavior consistent across source types.
 - Task 3 inherits the same validation and duplicate logic as Task 1, so incremental behavior only changes which records are selected, not how each record is judged.
 
@@ -96,27 +99,31 @@ python3 entrypoint.py --pipeline incremental --source-type file --source-file tr
 8. Write valid rows to workspace.bronze.transactions_test.
 9. Write invalid rows to workspace.bronze.quarantine_test.
 10. Advance the watermark to the latest successful transaction date.
+11. Append run metadata to workspace.bronze.ingestion_run_log_test.
 ```
 
 ### Task 3
 
 ```text
 1. Read the saved watermark from workspace.bronze.ingestion_watermark_test.
-2. Compute the start boundary using --lookback-days (default 0).
+2. Compute the start boundary using --lookback-hours (default 0).
 3. Filter the source so only rows newer than the boundary are processed.
 4. Run the same normalization, validation, quarantine, and duplicate steps as Task 1.
 5. Write valid and quarantine rows to the bronze tables.
 6. Advance the watermark after a successful load.
+7. Append run metadata to workspace.bronze.ingestion_run_log_test.
 ```
 
 ## DDL
 
-If you need to recreate the tables, use `sql/bronze_tables.sql`. It creates the three Delta tables under `workspace.bronze`. The ingestion code assumes those tables already exist and does not create them at runtime.
+If you need to recreate the tables, use `sql/bronze_tables.sql`. It creates the four Delta tables under `workspace.bronze`. The ingestion code assumes those tables already exist and does not create them at runtime.
+If you already created the old unpartitioned tables, drop and recreate them to apply the new partitioning and the run-log table.
 
 ## Notes
 
 - Duplicate handling is implemented as flagging, not deduplication.
 - The ingestion timestamp and watermark timestamps are written as UTC timestamps.
 - Default target tables are fully qualified as `workspace.bronze.<table>` unless you override `--catalog` or `--dataset`.
+- The run-log table captures batch metadata such as counts, watermark value, and status.
 - Default `--source-file` and `--schema-file` values point at the repo root; relative overrides are also resolved against the repo root if needed.
 - `sql/bronze_tables.sql` is for table setup or recreation, not for normal pipeline runs.
