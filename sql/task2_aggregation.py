@@ -38,51 +38,40 @@ def add_repo_root_to_path() -> None:
 add_repo_root_to_path()
 
 import ingestion.common as common
+from ingestion.cli import add_common_args
 
 
 REPO_ROOT = find_repo_root()
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Build the daily_account_summary gold table with Spark SQL."
-    )
-    parser.add_argument("--catalog", default="workspace")
-    parser.add_argument("--source-dataset", default="bronze")
-    parser.add_argument(
-        "--source-table", default="gibson_eletrolux_transactions_test"
-    )
-    parser.add_argument(
-        "--quarantine-dataset", default="bronze"
-    )
-    parser.add_argument(
-        "--quarantine-table", default="gibson_eletrolux_quarantine_test"
-    )
+def add_task2_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--output-dataset", default="gold")
     parser.add_argument("--output-table", default="daily_account_summary")
     parser.add_argument(
         "--sql-template",
-        default=str(REPO_ROOT / "sql" / "daily_account_summary.sql"),
+        default=str(REPO_ROOT / "ddl" / "daily_account_summary.sql"),
     )
-    return parser
 
 
 def _fqn_args(catalog: str, dataset: str) -> SimpleNamespace:
     return SimpleNamespace(catalog=catalog, dataset=dataset)
 
 
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Build the daily_account_summary gold table with Spark SQL."
+    )
+    add_common_args(parser)
+    add_task2_args(parser)
+    return parser
+
+
 def render_daily_account_summary_sql(args) -> str:
     template_path = common.resolve_repo_file(args.sql_template)
     template = template_path.read_text()
 
-    source_table_fqn = common.table_fqn(
-        _fqn_args(args.catalog, args.source_dataset),
-        args.source_table,
-    )
-    quarantine_table_fqn = common.table_fqn(
-        _fqn_args(args.catalog, args.quarantine_dataset),
-        args.quarantine_table,
-    )
+    source_table_fqn = common.table_fqn(args, args.transactions_table)
+    quarantine_table_fqn = common.table_fqn(args, args.quarantine_table)
     output_table_fqn = common.table_fqn(
         _fqn_args(args.catalog, args.output_dataset),
         args.output_table,
@@ -114,11 +103,11 @@ def run_task2(args) -> None:
     print("=========================================")
     print(
         "Source table  : "
-        f"{common.table_fqn(_fqn_args(args.catalog, args.source_dataset), args.source_table)}"
+        f"{common.table_fqn(args, args.transactions_table)}"
     )
     print(
         "Quarantine    : "
-        f"{common.table_fqn(_fqn_args(args.catalog, args.quarantine_dataset), args.quarantine_table)}"
+        f"{common.table_fqn(args, args.quarantine_table)}"
     )
     print(f"Output table  : {output_table_fqn}")
     print("Mode          : Spark SQL full refresh")

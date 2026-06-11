@@ -6,12 +6,12 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 
 - `ingestion/task1_ingest.py` - Task 1 entrypoint for full basic ingestion.
 - `ingestion/task3_incremental.py` - Task 3 entrypoint for incremental ingestion.
-- `entrypoint.py` - Unified Databricks entrypoint with `--pipeline basic|incremental`.
-- `task2_aggregation.py` - Task 2 entrypoint for the gold aggregation model.
+- `entrypoint.py` - Unified Databricks entrypoint with `--pipeline basic|incremental|task2`.
+- `sql/task2_aggregation.py` - Task 2 entrypoint for the gold aggregation model.
 - `ingestion/common.py` - Shared normalization, validation, duplicate detection, quarantine routing, watermark handling, and Delta merge logic.
 - `ingestion/cli.py` - Shared argument definitions for all ingestion entrypoints.
-- `sql/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, and control tables.
-- `sql/daily_account_summary.sql` - Spark SQL template for the Task 2 gold model.
+- `ddl/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, and control tables.
+- `ddl/daily_account_summary.sql` - Spark SQL template for the Task 2 gold model.
 - `outputs/` - Submission artifacts such as quarantine samples and watermark snapshots.
 
 ## Implementation Summary
@@ -106,7 +106,13 @@ Transformation rules:
 Run the model with:
 
 ```bash
-python3 task2_aggregation.py
+python3 sql/task2_aggregation.py
+```
+
+Or use the unified entrypoint:
+
+```bash
+python3 entrypoint.py --pipeline task2
 ```
 
 To produce the assignment extract for January through March 2024, query the gold table after the model finishes:
@@ -177,7 +183,7 @@ python3 entrypoint.py --pipeline incremental --source-type file --source-file tr
 
 ## DDL
 
-If you need to recreate the tables, use `sql/bronze_tables.sql`. It creates the four Delta tables under `workspace.bronze` with the `gibson_eletrolux_` prefix. The ingestion code assumes those tables already exist and does not create them at runtime.
+If you need to recreate the tables, use `ddl/bronze_tables.sql`. It creates the four Delta tables under `workspace.bronze` with the `gibson_eletrolux_` prefix. The ingestion code assumes those tables already exist and does not create them at runtime.
 If you already created the old unpartitioned tables, drop and recreate them to apply the new partitioning and the run-log table.
 
 ## Notes
@@ -187,9 +193,10 @@ If you already created the old unpartitioned tables, drop and recreate them to a
 - Default target tables are fully qualified as `workspace.bronze.<table>` unless you override `--catalog` or `--dataset`.
 - The run-log table captures batch metadata such as counts, watermark value, and status.
 - Default `--source-file` and `--schema-file` values point at the repo root; relative overrides are also resolved against the repo root if needed.
-- `sql/bronze_tables.sql` is for table setup or recreation, not for normal pipeline runs.
-- `sql/daily_account_summary.sql` is the Spark SQL model used by Task 2.
+- `ddl/bronze_tables.sql` is for table setup or recreation, not for normal pipeline runs.
+- `ddl/daily_account_summary.sql` is the Spark SQL model used by Task 2.
 - The Task 2 output table lives in `workspace.gold.daily_account_summary` by default.
+- `sql/` contains only the Task 2 runner script.
 
 ## Unit Tests
 

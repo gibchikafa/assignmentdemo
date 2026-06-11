@@ -1,19 +1,18 @@
 from types import SimpleNamespace
 
 from ingestion import common
-import task2_aggregation
+from sql import task2_aggregation
 
 
 def make_args(**overrides):
     base = {
         "catalog": "workspace",
-        "source_dataset": "bronze",
-        "source_table": "gibson_eletrolux_transactions_test",
-        "quarantine_dataset": "bronze",
+        "dataset": "bronze",
+        "transactions_table": "gibson_eletrolux_transactions_test",
         "quarantine_table": "gibson_eletrolux_quarantine_test",
         "output_dataset": "gold",
         "output_table": "daily_account_summary",
-        "sql_template": "sql/daily_account_summary.sql",
+        "sql_template": "ddl/daily_account_summary.sql",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -26,12 +25,14 @@ def squash_sql(sql: str) -> str:
 def test_task2_parser_defaults():
     args = task2_aggregation.build_parser().parse_args([])
 
+    assert args.source_type == "file"
     assert args.catalog == "workspace"
-    assert args.source_dataset == "bronze"
-    assert args.quarantine_dataset == "bronze"
+    assert args.dataset == "bronze"
+    assert args.transactions_table == "gibson_eletrolux_transactions_test"
+    assert args.quarantine_table == "gibson_eletrolux_quarantine_test"
     assert args.output_dataset == "gold"
     assert args.output_table == "daily_account_summary"
-    assert args.sql_template.endswith("sql/daily_account_summary.sql")
+    assert args.sql_template.endswith("ddl/daily_account_summary.sql")
 
 
 def test_render_daily_account_summary_sql_includes_assignment_rules():

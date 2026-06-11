@@ -45,3 +45,23 @@ def test_entrypoint_accepts_incremental_pipeline(monkeypatch):
 
     assert args.pipeline == "incremental"
     assert args.lookback_hours == 2
+
+
+def test_entrypoint_accepts_task2_pipeline(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "entrypoint.py",
+            "--pipeline",
+            "task2",
+            "--output-table",
+            "daily_account_summary_test",
+        ],
+    )
+
+    args = entrypoint.parse_args()
+
+    assert args.pipeline == "task2"
+    assert args.output_dataset == "gold"
+    assert args.output_table == "daily_account_summary_test"
