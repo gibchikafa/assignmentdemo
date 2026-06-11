@@ -1,14 +1,9 @@
-# ingestion/ingest_transactions_databricks.py
-
-import argparse
 import hashlib
 import json
-import os
-from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-import dlt
 import pandas as pd
 import pycountry
 from dateutil.parser import isoparse
@@ -40,6 +35,7 @@ NATURAL_KEY_COLUMNS = [
 
 VALID_COUNTRY_CODES = {country.alpha_2 for country in pycountry.countries}
 AMOUNT_SCALE = Decimal("0.01")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def transactions_table_schema(include_error_reason: bool = False) -> StructType:
@@ -76,28 +72,23 @@ def watermark_table_schema() -> StructType:
     )
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
+def resolve_repo_file(file_path: str) -> Path:
+    path = Path(file_path)
 
-    parser.add_argument("--source-type", choices=["file", "rest"], default="file")
-    parser.add_argument("--source-file", default="transactions.csv")
-    parser.add_argument("--schema-file", default="transactions_schema.json")
-    parser.add_argument("--api-key", default=os.getenv("SUPABASE_API_KEY"))
+    if path.is_file():
+        return path
 
-    parser.add_argument("--dataset", default="bronze")
-    parser.add_argument("--transactions-table", default="transactions_test")
-    parser.add_argument("--quarantine-table", default="quarantine_test")
-    parser.add_argument("--watermark-table", default="ingestion_watermark_test")
+    repo_path = REPO_ROOT / file_path
+    if repo_path.is_file():
+        return repo_path
 
-    parser.add_argument("--source-name", default="transactions")
-    parser.add_argument("--lookback-days", type=int, default=2)
-    parser.add_argument("--use-watermark", action="store_true")
-
-    return parser.parse_args()
+    raise FileNotFoundError(
+        f"Could not find file '{file_path}'. Checked '{path}' and '{repo_path}'."
+    )
 
 
 def load_validator(schema_file: str) -> Draft7Validator:
-    with open(schema_file, "r") as f:
+    with open(resolve_repo_file(schema_file), "r") as f:
         return Draft7Validator(json.load(f))
 
 
@@ -174,7 +165,7 @@ def parse_output_timestamp(value):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
 
-    return dt.astimezone(timezone.utc)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def parse_output_amount(value):
@@ -191,17 +182,13 @@ def prepare_output_record(record: dict) -> dict:
     prepared = dict(record)
     prepared["transaction_date"] = parse_output_timestamp(prepared.get("transaction_date"))
     prepared["amount"] = parse_output_amount(prepared.get("amount"))
-    prepared["ingestion_timestamp"] = parse_output_timestamp(prepared.get("ingestion_timestamp"))
+    prepared["ingestion_timestamp"] = parse_output_timestamp(
+        prepared.get("ingestion_timestamp")
+    )
     return prepared
 
 
 def table_exists(full_table_name: str) -> bool:
-    """
-    Return True only if the catalog can resolve the table immediately.
-
-    `spark.table(...)` is lazy under Spark Connect, so it can appear to succeed
-    even when the table does not exist yet. Use the catalog metadata API instead.
-    """
     parts = full_table_name.split(".")
 
     if len(parts) == 1:
@@ -222,16 +209,6 @@ def table_exists(full_table_name: str) -> bool:
 
 
 def load_existing_natural_keys(transactions_table: str) -> dict[str, set[str]]:
-    """
-    Returns:
-      {
-        natural_key_hash: {transaction_id_1, transaction_id_2, ...}
-      }
-
-    This lets us detect duplicates across multiple job runs.
-    If the same transaction_id appears again, that is not considered a duplicate;
-    it is an idempotent reprocess handled by MERGE.
-    """
     if not table_exists(transactions_table):
         return {}
 
@@ -250,7 +227,7 @@ def load_existing_natural_keys(transactions_table: str) -> dict[str, set[str]]:
 
 
 def get_watermark(args):
-    full_table = f"{args.dataset}.{args.watermark_table}"
+    full_table = f"{args.dataset}.{getattr(args, 'watermark_table', 'ingestion_watermark_test')}"
 
     spark.sql(f"""
         CREATE TABLE IF NOT EXISTS {full_table} (
@@ -264,7 +241,7 @@ def get_watermark(args):
     rows = spark.sql(f"""
         SELECT last_successful_transaction_date
         FROM {full_table}
-        WHERE source_name = '{args.source_name}'
+        WHERE source_name = '{getattr(args, 'source_name', 'transactions')}'
         ORDER BY updated_at DESC
         LIMIT 1
     """).collect()
@@ -281,27 +258,22 @@ def get_watermark(args):
 
 
 def watermark_start_value(args):
-    if not args.use_watermark:
-        return None
-
     watermark = get_watermark(args)
 
     if watermark is None:
         return None
 
-    start = watermark - timedelta(days=args.lookback_days)
+    lookback_days = getattr(args, "lookback_days", 2)
+    start = watermark - timedelta(days=lookback_days)
     return start.isoformat().replace("+00:00", "Z")
 
 
 def update_watermark(args, valid_records: list[dict]):
-    if not args.use_watermark:
-        return
-
     if not valid_records:
         print("No valid records, watermark not updated")
         return
 
-    full_table = f"{args.dataset}.{args.watermark_table}"
+    full_table = f"{args.dataset}.{getattr(args, 'watermark_table', 'ingestion_watermark_test')}"
 
     spark.sql(f"""
         CREATE TABLE IF NOT EXISTS {full_table} (
@@ -313,13 +285,17 @@ def update_watermark(args, valid_records: list[dict]):
     """)
 
     max_tx_date = max(isoparse(r["transaction_date"]) for r in valid_records)
+    if max_tx_date.tzinfo is None:
+        max_tx_date = max_tx_date.replace(tzinfo=timezone.utc)
 
     update_df = spark.createDataFrame(
         [
             {
-                "source_name": args.source_name,
-                "last_successful_transaction_date": max_tx_date,
-                "updated_at": datetime.now(timezone.utc),
+                "source_name": getattr(args, "source_name", "transactions"),
+                "last_successful_transaction_date": max_tx_date.astimezone(
+                    timezone.utc
+                ).replace(tzinfo=None),
+                "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
             }
         ],
         schema=watermark_table_schema(),
@@ -379,7 +355,7 @@ def supabase_transactions_source(api_key: str, start_value: str | None):
 
 
 def iter_file_records(source_file: str):
-    path = Path(source_file)
+    path = resolve_repo_file(source_file)
 
     if path.suffix.lower() == ".csv":
         df = pd.read_csv(path, dtype=str)
@@ -394,8 +370,8 @@ def iter_file_records(source_file: str):
         yield record
 
 
-def iter_source_records(args):
-    start_value = watermark_start_value(args)
+def iter_source_records(args, use_watermark: bool):
+    start_value = watermark_start_value(args) if use_watermark else None
 
     if args.source_type == "file":
         for record in iter_file_records(args.source_file):
@@ -413,7 +389,7 @@ def iter_source_records(args):
         yield from source.resources["transactions"]
 
 
-def split_records(args, validator):
+def split_records(args, validator, use_watermark: bool):
     transactions_table = f"{args.dataset}.{args.transactions_table}"
     existing_natural_keys = load_existing_natural_keys(transactions_table)
 
@@ -423,7 +399,7 @@ def split_records(args, validator):
     seen_in_current_batch = {}
     ingestion_timestamp = datetime.now(timezone.utc).isoformat()
 
-    for raw_record in iter_source_records(args):
+    for raw_record in iter_source_records(args, use_watermark=use_watermark):
         record = normalize_record(raw_record)
 
         errors = validate_record(record, validator)
@@ -451,8 +427,6 @@ def split_records(args, validator):
             record["error_reason"] = "; ".join(errors)
             quarantine_records.append(record)
         else:
-            # Duplicates are kept in bronze, flagged with is_duplicate=true.
-            # dbt staging can exclude them later with WHERE is_duplicate = false.
             valid_records.append(record)
 
     return valid_records, quarantine_records
@@ -492,14 +466,14 @@ def write_delta_merge(
     print(f"Wrote/merged {len(records)} records into {full_table_name}")
 
 
-def main():
-    args = parse_args()
-    validator = load_validator(args.schema_file)
-
+def run_pipeline(args, use_watermark: bool):
     spark.conf.set("spark.sql.session.timeZone", "UTC")
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {args.dataset}")
 
-    valid_records, quarantine_records = split_records(args, validator)
+    validator = load_validator(args.schema_file)
+    valid_records, quarantine_records = split_records(
+        args, validator, use_watermark=use_watermark
+    )
 
     transactions_table = f"{args.dataset}.{args.transactions_table}"
     quarantine_table = f"{args.dataset}.{args.quarantine_table}"
@@ -512,7 +486,8 @@ def main():
         include_error_reason=True,
     )
 
-    update_watermark(args, valid_records)
+    if use_watermark:
+        update_watermark(args, valid_records)
 
     duplicate_count = sum(r["is_duplicate"] for r in valid_records)
 
@@ -528,9 +503,8 @@ def main():
     print("Destination:")
     print(f"  Valid      : {transactions_table}")
     print(f"  Quarantine : {quarantine_table}")
-    print(f"  Watermark  : {args.dataset}.{args.watermark_table}")
+
+    if use_watermark:
+        print(f"  Watermark  : {args.dataset}.{getattr(args, 'watermark_table', 'ingestion_watermark_test')}")
+
     print("=========================================")
-
-
-if __name__ == "__main__":
-    main()
