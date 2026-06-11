@@ -32,6 +32,19 @@ Why this design:
 - The write path matches the final target schema, which lets Task 3 reuse the same code.
 - The pipeline assumes the bronze tables are precreated, which avoids runtime schema creation and Hive Metastore fallback issues in Databricks serverless.
 
+Validation approach:
+
+- Each record is validated against the supplied JSON schema in `transactions_schema.json`.
+- The pipeline also applies explicit domain checks that are easier to express in code than in JSON schema, such as ISO datetime parsing for `transaction_date` and country code membership checks.
+- Validation failures do not stop the batch. Instead, the row is routed to quarantine with a combined `error_reason` so the dataset stays auditable.
+
+Duplicate-handling strategy:
+
+- Duplicates are identified with a natural key built from the business columns that define a transaction.
+- The natural key is hashed to make comparisons stable and efficient.
+- The code checks both the current batch and the already ingested bronze table so reruns and cross-batch duplicates are both caught.
+- Duplicate rows are still written with `is_duplicate = true` rather than being dropped, because the assignment asks for traceability rather than loss of records.
+
 Run it with the Task 1 script:
 
 ```bash
@@ -54,6 +67,7 @@ Why this design:
 - A zero-day lookback makes the common "run Task 1, then run Task 3" flow safe and predictable.
 - Increasing `--lookback-days` remains available if late-arriving data needs a replay window.
 - Using the same watermark table for both file and REST sources keeps the behavior consistent across source types.
+- Task 3 inherits the same validation and duplicate logic as Task 1, so incremental behavior only changes which records are selected, not how each record is judged.
 
 Run it with the Task 3 script:
 
