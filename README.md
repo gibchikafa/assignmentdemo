@@ -122,6 +122,8 @@ Transformation rules:
 - `currencies` is stored as a sorted comma-separated list of distinct currencies.
 - `updated_at` is the latest `ingestion_timestamp` among the contributing rows, which keeps reruns stable.
 
+The assignment text defines `updated_at` as the time the row was last computed in UTC. This implementation uses the latest source `ingestion_timestamp` instead so the model stays deterministic across reruns and matches the rest of the pipeline's data-driven timestamp handling.
+
 Run the model with:
 
 ```bash

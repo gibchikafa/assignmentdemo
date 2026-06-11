@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 from dataclasses import dataclass
 
 from databricks.sdk import WorkspaceClient
@@ -62,44 +61,26 @@ JOB_SPECS = [
 ]
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Create the three Databricks jobs for basic, incremental, and summary runs."
-    )
-    parser.add_argument("--git-url", default=DEFAULT_GIT_URL)
-    parser.add_argument("--git-branch", default=DEFAULT_GIT_BRANCH)
-    parser.add_argument("--job-prefix", default=DEFAULT_JOB_PREFIX)
-    parser.add_argument(
-        "--environment-version", default=DEFAULT_ENVIRONMENT_VERSION
-    )
-    return parser
-
-
 def job_name(job_prefix: str, suffix: str) -> str:
     return f"{job_prefix}-{suffix}"
 
 
-def build_environment_spec(environment_key: str, environment_version: str) -> JobEnvironment:
+def build_environment_spec(environment_key: str) -> JobEnvironment:
     return JobEnvironment(
         environment_key=environment_key,
         spec=Environment(
             dependencies=list(DEFAULT_DEPENDENCIES),
-            environment_version=environment_version,
+            environment_version=DEFAULT_ENVIRONMENT_VERSION,
         ),
     )
 
 
 def create_job(
     workspace: WorkspaceClient,
-    *,
-    git_url: str,
-    git_branch: str,
-    job_prefix: str,
-    environment_version: str,
     spec: JobSpec,
 ):
     return workspace.jobs.create(
-        name=job_name(job_prefix, spec.suffix),
+        name=job_name(DEFAULT_JOB_PREFIX, spec.suffix),
         tasks=[
             Task(
                 task_key=spec.task_key,
@@ -111,38 +92,28 @@ def create_job(
             )
         ],
         git_source=GitSource(
-            git_url=git_url,
+            git_url=DEFAULT_GIT_URL,
             git_provider=GitProvider.GIT_HUB,
-            git_branch=git_branch,
+            git_branch=DEFAULT_GIT_BRANCH,
         ),
-        environments=[
-            build_environment_spec(spec.environment_key, environment_version)
-        ],
+        environments=[build_environment_spec(spec.environment_key)],
         performance_target=PerformanceTarget.PERFORMANCE_OPTIMIZED,
     )
 
 
-def create_all_jobs(args) -> list[tuple[str, int | str | None]]:
+def create_all_jobs() -> list[tuple[str, int | str | None]]:
     workspace = WorkspaceClient()
     created = []
 
     for spec in JOB_SPECS:
-        job = create_job(
-            workspace,
-            git_url=args.git_url,
-            git_branch=args.git_branch,
-            job_prefix=args.job_prefix,
-            environment_version=args.environment_version,
-            spec=spec,
-        )
-        created.append((job_name(args.job_prefix, spec.suffix), getattr(job, "job_id", None)))
+        job = create_job(workspace, spec=spec)
+        created.append((job_name(DEFAULT_JOB_PREFIX, spec.suffix), getattr(job, "job_id", None)))
 
     return created
 
 
 def main() -> None:
-    args = build_parser().parse_args([])
-    created = create_all_jobs(args)
+    created = create_all_jobs()
 
     print("Created Databricks jobs:")
     for name, job_id in created:
@@ -151,4 +122,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
