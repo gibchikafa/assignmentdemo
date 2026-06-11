@@ -16,6 +16,8 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 
 ## How to Run
 
+Before running any job, execute [`ddl/bronze_tables.sql`](ddl/bronze_tables.sql) in Databricks SQL or a Databricks notebook to create the bronze, quarantine, watermark, and run-log tables.
+
 The repository uses three root entrypoints:
 
 ```bash
