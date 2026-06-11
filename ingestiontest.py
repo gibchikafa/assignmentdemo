@@ -7,8 +7,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import dlt
 import pandas as pd
 from dateutil.parser import isoparse
+from dlt.sources.rest_api import rest_api_source
 from jsonschema import Draft7Validator
 
 
@@ -33,14 +35,19 @@ VALID_COUNTRY_CODES = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--source-type", choices=["file"], default="file")
-    parser.add_argument("--source-file", required=True)
-    parser.add_argument("--schema-file", required=True)
+    parser = argparse.ArgumentParser(
+        description="Ingest transactions into Databricks Delta bronze tables"
+    )
+
+    parser.add_argument("--source-type", choices=["file", "rest"], default="file")
+    parser.add_argument("--source-file", default="transactions.csv")
+    parser.add_argument("--schema-file", default="transactions_schema.json")
 
     parser.add_argument("--dataset", default="bronze")
     parser.add_argument("--transactions-table", default="transactions_test")
     parser.add_argument("--quarantine-table", default="quarantine_test")
+
+    parser.add_argument("--api-key", default=os.getenv("SUPABASE_API_KEY"))
 
     return parser.parse_args()
 
@@ -63,12 +70,9 @@ def normalize_record(record: dict) -> dict:
         if tx_date.endswith("+00:00"):
             tx_date = tx_date.replace("+00:00", "Z")
 
-        # Handles pandas datetime-like values such as:
-        # 2024-01-01 12:30:00
         if " " in tx_date and "T" not in tx_date:
             tx_date = tx_date.replace(" ", "T")
 
-        # If timezone missing, assume UTC for fallback file.
         if not tx_date.endswith("Z"):
             tx_date = tx_date + "Z"
 
@@ -110,6 +114,46 @@ def natural_key_hash(record: dict) -> str:
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
+def supabase_transactions_source(api_key: str):
+    if not api_key:
+        raise ValueError(
+            "API key is required for REST ingestion. "
+            "Pass --api-key or set SUPABASE_API_KEY."
+        )
+
+    return rest_api_source(
+        {
+            "client": {
+                "base_url": API_BASE_URL,
+                "headers": {
+                    "apikey": api_key,
+                    "Authorization": f"Bearer {api_key}",
+                },
+            },
+            "resources": [
+                {
+                    "name": "transactions",
+                    "endpoint": {
+                        "path": "transactions",
+                        "params": {
+                            "order": "transaction_date.asc",
+                        },
+                        "paginator": {
+                            "type": "offset",
+                            "limit": 100,
+                            "offset": 0,
+                            "limit_param": "limit",
+                            "offset_param": "offset",
+                            "stop_after_empty_page": True,
+                        },
+                    },
+                }
+            ],
+        },
+        name="supabase_transactions",
+    )
+
+
 def iter_file_records(source_file: str):
     path = Path(source_file)
 
@@ -126,6 +170,18 @@ def iter_file_records(source_file: str):
         yield record
 
 
+def iter_source_records(args):
+    if args.source_type == "file":
+        yield from iter_file_records(args.source_file)
+
+    elif args.source_type == "rest":
+        source = supabase_transactions_source(args.api_key)
+        yield from source.resources["transactions"]
+
+    else:
+        raise ValueError(f"Unsupported source type: {args.source_type}")
+
+
 def fetch_and_split_records(args, validator: Draft7Validator):
     valid_records = []
     quarantine_records = []
@@ -133,7 +189,7 @@ def fetch_and_split_records(args, validator: Draft7Validator):
     seen_natural_keys = set()
     ingestion_timestamp = datetime.now(timezone.utc).isoformat()
 
-    for raw_record in iter_file_records(args.source_file):
+    for raw_record in iter_source_records(args):
         record = normalize_record(raw_record)
 
         record["ingestion_timestamp"] = ingestion_timestamp
@@ -178,6 +234,7 @@ def main():
 
     valid_records, quarantine_records = fetch_and_split_records(args, validator)
 
+    print(f"Source type: {args.source_type}")
     print(f"Valid records: {len(valid_records)}")
     print(f"Quarantine records: {len(quarantine_records)}")
 
@@ -194,6 +251,9 @@ def main():
         quarantine_records,
         f"{args.dataset}.{args.quarantine_table}",
     )
+
+    print(f"Valid table: {args.dataset}.{args.transactions_table}")
+    print(f"Quarantine table: {args.dataset}.{args.quarantine_table}")
 
 
 if __name__ == "__main__":
