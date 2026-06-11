@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -13,6 +14,14 @@ import pycountry
 from dateutil.parser import isoparse
 from dlt.sources.rest_api import rest_api_source
 from jsonschema import Draft7Validator
+from pyspark.sql.types import (
+    BooleanType,
+    DecimalType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 
 API_BASE_URL = "https://fgbjekjqnbmtkmeewexb.supabase.co/rest/v1/"
@@ -30,6 +39,41 @@ NATURAL_KEY_COLUMNS = [
 ]
 
 VALID_COUNTRY_CODES = {country.alpha_2 for country in pycountry.countries}
+AMOUNT_SCALE = Decimal("0.01")
+
+
+def transactions_table_schema(include_error_reason: bool = False) -> StructType:
+    fields = [
+        StructField("transaction_id", StringType(), True),
+        StructField("account_id", StringType(), True),
+        StructField("transaction_date", TimestampType(), True),
+        StructField("amount", DecimalType(18, 2), True),
+        StructField("currency", StringType(), True),
+        StructField("transaction_type", StringType(), True),
+        StructField("merchant_name", StringType(), True),
+        StructField("merchant_category", StringType(), True),
+        StructField("status", StringType(), True),
+        StructField("country_code", StringType(), True),
+        StructField("ingestion_timestamp", TimestampType(), True),
+        StructField("natural_key", StringType(), True),
+        StructField("natural_key_hash", StringType(), True),
+        StructField("is_duplicate", BooleanType(), True),
+    ]
+
+    if include_error_reason:
+        fields.append(StructField("error_reason", StringType(), True))
+
+    return StructType(fields)
+
+
+def watermark_table_schema() -> StructType:
+    return StructType(
+        [
+            StructField("source_name", StringType(), True),
+            StructField("last_successful_transaction_date", TimestampType(), True),
+            StructField("updated_at", TimestampType(), True),
+        ]
+    )
 
 
 def parse_args():
@@ -113,6 +157,42 @@ def natural_key(record: dict) -> str:
 
 def natural_key_hash(record: dict) -> str:
     return hashlib.sha256(natural_key(record).encode("utf-8")).hexdigest()
+
+
+def parse_output_timestamp(value):
+    if value in (None, ""):
+        return None
+
+    try:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            dt = isoparse(str(value))
+    except Exception:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(timezone.utc)
+
+
+def parse_output_amount(value):
+    if value in (None, ""):
+        return None
+
+    try:
+        return Decimal(str(value)).quantize(AMOUNT_SCALE, rounding=ROUND_HALF_UP)
+    except Exception:
+        return None
+
+
+def prepare_output_record(record: dict) -> dict:
+    prepared = dict(record)
+    prepared["transaction_date"] = parse_output_timestamp(prepared.get("transaction_date"))
+    prepared["amount"] = parse_output_amount(prepared.get("amount"))
+    prepared["ingestion_timestamp"] = parse_output_timestamp(prepared.get("ingestion_timestamp"))
+    return prepared
 
 
 def table_exists(full_table_name: str) -> bool:
@@ -234,13 +314,16 @@ def update_watermark(args, valid_records: list[dict]):
 
     max_tx_date = max(isoparse(r["transaction_date"]) for r in valid_records)
 
-    update_df = spark.createDataFrame([
-        {
-            "source_name": args.source_name,
-            "last_successful_transaction_date": max_tx_date,
-            "updated_at": datetime.now(timezone.utc),
-        }
-    ])
+    update_df = spark.createDataFrame(
+        [
+            {
+                "source_name": args.source_name,
+                "last_successful_transaction_date": max_tx_date,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        ],
+        schema=watermark_table_schema(),
+    )
 
     update_df.createOrReplaceTempView("watermark_update_view")
 
@@ -375,14 +458,23 @@ def split_records(args, validator):
     return valid_records, quarantine_records
 
 
-def write_delta_merge(records: list[dict], full_table_name: str, merge_key: str):
+def write_delta_merge(
+    records: list[dict],
+    full_table_name: str,
+    merge_key: str,
+    include_error_reason: bool = False,
+):
     if not records:
         print(f"No records to write to {full_table_name}")
         return
 
     spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
 
-    df = spark.createDataFrame(records)
+    prepared_records = [prepare_output_record(record) for record in records]
+    df = spark.createDataFrame(
+        prepared_records,
+        schema=transactions_table_schema(include_error_reason=include_error_reason),
+    )
     temp_view = full_table_name.replace(".", "_") + "_view"
     df.createOrReplaceTempView(temp_view)
 
@@ -404,6 +496,7 @@ def main():
     args = parse_args()
     validator = load_validator(args.schema_file)
 
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {args.dataset}")
 
     valid_records, quarantine_records = split_records(args, validator)
@@ -412,7 +505,12 @@ def main():
     quarantine_table = f"{args.dataset}.{args.quarantine_table}"
 
     write_delta_merge(valid_records, transactions_table, "transaction_id")
-    write_delta_merge(quarantine_records, quarantine_table, "transaction_id")
+    write_delta_merge(
+        quarantine_records,
+        quarantine_table,
+        "transaction_id",
+        include_error_reason=True,
+    )
 
     update_watermark(args, valid_records)
 
