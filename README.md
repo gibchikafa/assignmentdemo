@@ -7,6 +7,7 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 - `entrypoint.py` - Task 1 basic ingestion entrypoint.
 - `entrypoint_incremental.py` - Task 3 incremental ingestion entrypoint.
 - `entrypoint_summaries.py` - Task 2 daily summary entrypoint.
+- `create_databricks_jobs.py` - Helper that creates the three Databricks jobs from the SDK.
 - `ingestion/common.py` - Shared normalization, validation, duplicate detection, quarantine routing, watermark handling, and Delta merge logic.
 - `ingestion/cli.py` - Shared argument definitions for all ingestion entrypoints.
 - `ddl/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, and control tables.
@@ -196,4 +197,20 @@ Run the suite locally with:
 
 ```bash
 pytest -q
+```
+
+## Databricks Jobs
+
+`create_databricks_jobs.py` provisions the three Git-backed Databricks jobs in one call:
+
+- basic ingestion -> `entrypoint.py`
+- incremental ingestion -> `entrypoint_incremental.py`
+- summaries -> `entrypoint_summaries.py`
+
+It uses your default Databricks auth configuration through `WorkspaceClient()`. If needed, set `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, or `DATABRICKS_CONFIG_PROFILE` before running it.
+
+Example:
+
+```bash
+python3 create_databricks_jobs.py
 ```

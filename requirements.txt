@@ -1,3 +1,4 @@
 dlt==1.27.0
 pycountry==26.2.16
+databricks-sdk
 pytest>=8.3,<9
