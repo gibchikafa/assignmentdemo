@@ -14,6 +14,27 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 - `sql/daily_account_summary.sql` - Spark SQL template for the Task 2 gold model.
 - `outputs/` - Submission artifacts such as quarantine samples and watermark snapshots.
 
+## How to Run
+
+The repository uses three root entrypoints:
+
+```bash
+# Task 1 basic ingestion
+python3 entrypoint.py --source-type file --source-file transactions.csv
+
+# Task 3 incremental ingestion
+python3 entrypoint_incremental.py --source-type file --source-file transactions.csv
+
+# Task 2 daily summaries
+python3 entrypoint_summaries.py
+```
+
+To create the three Databricks jobs from the repo, run:
+
+```bash
+python3 create_databricks_jobs.py
+```
+
 ## Implementation Summary
 
 - The public launchers are just the three root scripts above: one for basic ingestion, one for incremental ingestion, and one for the daily summaries.
