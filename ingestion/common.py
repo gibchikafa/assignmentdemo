@@ -431,8 +431,6 @@ def write_delta_merge(
         print(f"No records to write to {full_table_name}")
         return
 
-    spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
-
     prepared_records = [prepare_output_record(record) for record in records]
     df = spark.createDataFrame(
         prepared_records,
