@@ -184,7 +184,7 @@ def normalize_record(record: dict) -> dict:
     amount = record.get("amount")
     if amount not in (None, ""):
         try:
-            record["amount"] = float(amount)
+            record["amount"] = Decimal(str(amount))
         except Exception:
             pass
 
@@ -213,7 +213,15 @@ def validate_record(record: dict, validator: Draft7Validator) -> list[str]:
 
 
 def natural_key(record: dict) -> str:
-    return "|".join(str(record.get(col)) for col in NATURAL_KEY_COLUMNS)
+    parts = []
+    for col in NATURAL_KEY_COLUMNS:
+        value = record.get(col)
+        if col == "amount" and value not in (None, ""):
+            value = str(float(value))
+        else:
+            value = str(value)
+        parts.append(value)
+    return "|".join(parts)
 
 
 def natural_key_hash(record: dict) -> str:

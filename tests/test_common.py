@@ -75,14 +75,15 @@ def test_normalize_record_and_validate_record():
         "tx-1",
         "2026-01-01 10:00:00+00:00",
         country_code="XX",
-        amount="10.50",
+        amount="75.74",
     )
 
     normalized = common.normalize_record(record)
 
     assert "id" not in normalized
     assert normalized["transaction_date"] == "2026-01-01T10:00:00Z"
-    assert normalized["amount"] == 10.5
+    assert normalized["amount"] == Decimal("75.74")
+    assert isinstance(normalized["amount"], Decimal)
 
     errors = common.validate_record(normalized, common.Draft7Validator({}))
 

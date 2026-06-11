@@ -55,6 +55,7 @@ Validation approach:
 
 - Each record is validated against the supplied JSON schema in `transactions_schema.json`.
 - The pipeline also applies explicit domain checks that are easier to express in code than in JSON schema, such as ISO datetime parsing for `transaction_date` and country code membership checks.
+- `amount` is normalized as a `Decimal` before validation so the schema's `multipleOf: 0.01` rule is evaluated exactly instead of through floating-point rounding.
 - Validation failures do not stop the batch. Instead, the row is routed to quarantine with a combined `error_reason` so the dataset stays auditable.
 
 Duplicate-handling strategy:
