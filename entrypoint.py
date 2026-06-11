@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument(
         "--pipeline",
         choices=["basic", "incremental"],
-        default="incremental",
+        default="basic",
         help="Choose basic Task 1 ingestion or incremental Task 3 ingestion.",
     )
     return parser.parse_args()

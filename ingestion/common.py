@@ -471,8 +471,9 @@ def run_pipeline(args, use_watermark: bool):
         include_error_reason=True,
     )
 
-    if use_watermark:
-        update_watermark(args, valid_records)
+    # Advance the watermark after every successful load so a later incremental
+    # run can continue from the latest processed transaction date.
+    update_watermark(args, valid_records)
 
     duplicate_count = sum(r["is_duplicate"] for r in valid_records)
 

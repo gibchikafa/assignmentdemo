@@ -64,5 +64,7 @@ The ingestion code assumes the target tables already exist and does not create s
 - Duplicate handling is implemented as flagging, not deduplication.
 - The ingestion timestamp and watermark timestamps are written as UTC timestamps.
 - `entrypoint.py` accepts the union of Task 1 and Task 3 arguments and switches behavior with `--pipeline basic|incremental`.
+- `entrypoint.py` defaults to Task 1/basic ingestion when `--pipeline` is omitted.
+- Successful loads advance the watermark so a later incremental run can resume from the latest processed data.
 - Default `--source-file` and `--schema-file` values point at the repo root; relative overrides are also resolved against the repo root if needed.
 - Default target tables are fully qualified as `workspace.bronze.<table>` unless you override `--catalog` or `--dataset`.
