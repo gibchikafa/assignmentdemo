@@ -1,0 +1,36 @@
+[
+  {
+    "run_id": "cf57a718d07243b6836f92ad58e62488",
+    "pipeline": "basic",
+    "source_type": "file",
+    "source_name": "transactions",
+    "catalog_name": "workspace",
+    "schema_name": "bronze",
+    "started_at": "2026-06-11T18:20:09.861Z",
+    "completed_at": "2026-06-11T18:20:26.152Z",
+    "input_records": 352,
+    "valid_records": 349,
+    "quarantine_records": 3,
+    "duplicate_records": 5,
+    "lookback_hours": 0,
+    "watermark_value": "2024-04-15T09:30:00.000Z",
+    "status": "success"
+  },
+  {
+    "run_id": "b969fe60f8c443e98858af9ecacdcb30",
+    "pipeline": "incremental",
+    "source_type": "file",
+    "source_name": "transactions",
+    "catalog_name": "workspace",
+    "schema_name": "bronze",
+    "started_at": "2026-06-11T18:21:11.098Z",
+    "completed_at": "2026-06-11T18:21:14.944Z",
+    "input_records": 0,
+    "valid_records": 0,
+    "quarantine_records": 0,
+    "duplicate_records": 0,
+    "lookback_hours": 0,
+    "watermark_value": null,
+    "status": "success"
+  }
+]
