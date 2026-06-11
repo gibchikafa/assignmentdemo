@@ -1,4 +1,5 @@
 CREATE SCHEMA IF NOT EXISTS workspace.bronze;
+CREATE SCHEMA IF NOT EXISTS workspace.gold;
 
 CREATE TABLE IF NOT EXISTS workspace.bronze.gibson_eletrolux_transactions_test (
   transaction_id STRING,

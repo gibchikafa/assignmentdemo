@@ -21,7 +21,7 @@ from databricks.sdk.service.jobs import (
 DEFAULT_GIT_URL = "https://github.com/gibchikafa/assignmentdemo.git"
 DEFAULT_GIT_BRANCH = "main"
 DEFAULT_JOB_PREFIX = "assignmentdemo"
-DEFAULT_ENVIRONMENT_VERSION = "5"
+DEFAULT_ENVIRONMENT_VERSION = "1"
 DEFAULT_DEPENDENCIES = [
     "dlt==1.27.0",
     "pycountry==26.2.16",
@@ -141,7 +141,7 @@ def create_all_jobs(args) -> list[tuple[str, int | str | None]]:
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    args = build_parser().parse_args([])
     created = create_all_jobs(args)
 
     print("Created Databricks jobs:")
@@ -151,3 +151,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
