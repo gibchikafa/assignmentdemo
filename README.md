@@ -16,9 +16,15 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 
 ## How to Run
 
-Before running any job, execute [`ddl/bronze_tables.sql`](ddl/bronze_tables.sql) in Databricks SQL or a Databricks notebook to create the bronze, quarantine, watermark, and run-log tables.
+Run the project in this order:
 
-The repository uses three root entrypoints:
+1. Execute [`ddl/bronze_tables.sql`](ddl/bronze_tables.sql) in Databricks SQL or a Databricks notebook to create the bronze, quarantine, watermark, and run-log tables.
+2. Run [`create_databricks_jobs.py`](create_databricks_jobs.py) to create the three Databricks jobs.
+3. Run the basic ingestion job first and wait for it to finish.
+4. Run the incremental ingestion job next.
+5. Run the summaries job last.
+
+The three root entrypoints are:
 
 ```bash
 # Task 1 basic ingestion
@@ -31,11 +37,7 @@ python3 entrypoint_incremental.py --source-type file --source-file transactions.
 python3 entrypoint_summaries.py
 ```
 
-To create the three Databricks jobs from the repo, run:
-
-```bash
-python3 create_databricks_jobs.py
-```
+The corresponding local entrypoints are shown below for reference.
 
 ## Implementation Summary
 
