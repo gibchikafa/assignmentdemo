@@ -192,15 +192,17 @@ def fetch_and_split_records(args, validator: Draft7Validator):
     for raw_record in iter_source_records(args):
         record = normalize_record(raw_record)
 
-        record["ingestion_timestamp"] = ingestion_timestamp
+        # Validate only the business fields from the source.
+        errors = validate_record(record, validator)
 
         nk_hash = natural_key_hash(record)
-        record["natural_key_hash"] = nk_hash
-
-        record["is_duplicate"] = nk_hash in seen_natural_keys
+        is_duplicate = nk_hash in seen_natural_keys
         seen_natural_keys.add(nk_hash)
 
-        errors = validate_record(record, validator)
+        # Add metadata after schema validation.
+        record["ingestion_timestamp"] = ingestion_timestamp
+        record["natural_key_hash"] = nk_hash
+        record["is_duplicate"] = is_duplicate
 
         if errors:
             record["error_reason"] = "; ".join(errors)
