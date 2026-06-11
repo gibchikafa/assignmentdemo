@@ -518,20 +518,24 @@ def iter_file_records(source_file: str):
 def iter_source_records(args, use_watermark: bool):
     start_value = watermark_start_value(args) if use_watermark else None
     include_boundary = watermark_includes_boundary(args) if use_watermark else True
+    boundary = parse_output_timestamp(start_value) if start_value else None
 
     if args.source_type == "file":
         for record in iter_file_records(args.source_file):
             record = normalize_record(record)
 
-            if start_value:
-                tx_date = isoparse(record["transaction_date"])
-                boundary = isoparse(start_value)
-                if include_boundary:
-                    if tx_date < boundary:
-                        continue
-                else:
-                    if tx_date <= boundary:
-                        continue
+            if boundary is not None:
+                tx_date = parse_output_timestamp(record.get("transaction_date"))
+
+                # Malformed dates should still reach validation/quarantine instead
+                # of failing the incremental filter before the row is assessed.
+                if tx_date is not None:
+                    if include_boundary:
+                        if tx_date < boundary:
+                            continue
+                    else:
+                        if tx_date <= boundary:
+                            continue
 
             yield record
 

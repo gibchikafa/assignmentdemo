@@ -191,6 +191,28 @@ def test_iter_source_records_filters_boundary_by_lookback_hours(monkeypatch):
     ]
 
 
+def test_iter_source_records_keeps_invalid_dates_for_quarantine(monkeypatch):
+    boundary = "2026-01-01T00:00:00Z"
+    source_rows = [
+        make_raw_record("before", "2025-12-31T23:59:59Z"),
+        make_raw_record("bad", "not-a-date"),
+        make_raw_record("after", "2026-01-01T00:00:01Z"),
+    ]
+
+    monkeypatch.setattr(
+        common,
+        "iter_file_records",
+        lambda _source_file: iter(source_rows),
+    )
+    monkeypatch.setattr(common, "watermark_start_value", lambda _args: boundary)
+
+    args = make_args(lookback_hours=2)
+    result = list(common.iter_source_records(args, use_watermark=True))
+
+    assert [row["transaction_id"] for row in result] == ["bad", "after"]
+    assert result[0]["transaction_date"] == "not-a-dateZ"
+
+
 def test_iter_file_records_reads_csv_from_repo_root(monkeypatch, tmp_path):
     csv_file = tmp_path / "nested" / "transactions.csv"
     csv_file.parent.mkdir(parents=True, exist_ok=True)
