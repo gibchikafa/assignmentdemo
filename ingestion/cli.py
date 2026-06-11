@@ -14,6 +14,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--api-key", default=os.getenv("SUPABASE_API_KEY"))
 
+    parser.add_argument("--catalog", default="main")
     parser.add_argument("--dataset", default="bronze")
     parser.add_argument("--transactions-table", default="transactions_test")
     parser.add_argument("--quarantine-table", default="quarantine_test")

@@ -9,7 +9,7 @@ This repository is organized to match the assignment hand-in structure and now s
 - `entrypoint.py` - Unified wrapper for Databricks jobs with `--pipeline basic|incremental`.
 - `ingestion/common.py` - Shared ingestion, validation, duplicate detection, and Delta write helpers.
 - `ingestion/cli.py` - Shared argument definitions for all ingestion entrypoints.
-- `sql/bronze_tables.sql` - Delta DDL for the raw, quarantine, and watermark tables.
+- `sql/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, and watermark tables.
 - `outputs/` - Submission artifacts such as quarantine samples and watermark snapshots.
 
 ## Task 1
@@ -38,7 +38,7 @@ python3 entrypoint.py --pipeline basic --source-type file --source-file transact
 
 Task 3 is the incremental path. It extends Task 1 with:
 
-- watermark lookup from `bronze.ingestion_watermark_test`
+- watermark lookup from the precreated watermark table
 - late-data lookback handling
 - API-side filtering for new records only
 
@@ -56,7 +56,8 @@ python3 entrypoint.py --pipeline incremental --source-type file --source-file tr
 
 ## DDL
 
-Run `sql/bronze_tables.sql` before the ingestion scripts if you want to pre-create the Delta tables.
+Run `sql/bronze_tables.sql` before the ingestion scripts to pre-create the Unity Catalog tables under `main.bronze`.
+The ingestion code assumes the target tables already exist and does not create schemas or tables at runtime.
 
 ## Notes
 
@@ -64,3 +65,4 @@ Run `sql/bronze_tables.sql` before the ingestion scripts if you want to pre-crea
 - The ingestion timestamp and watermark timestamps are written as UTC timestamps.
 - `entrypoint.py` accepts the union of Task 1 and Task 3 arguments and switches behavior with `--pipeline basic|incremental`.
 - Default `--source-file` and `--schema-file` values point at the repo root; relative overrides are also resolved against the repo root if needed.
+- Default target tables are fully qualified as `main.bronze.<table>` unless you override `--catalog` or `--dataset`.

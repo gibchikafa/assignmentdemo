@@ -40,6 +40,30 @@ AMOUNT_SCALE = Decimal("0.01")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def quote_ident(identifier: str) -> str:
+    return f"`{identifier}`"
+
+
+def sql_string_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def table_fqn(args, table_name: str) -> str:
+    catalog = getattr(args, "catalog", "main")
+    dataset = getattr(args, "dataset", "bronze")
+    return ".".join(
+        [quote_ident(catalog), quote_ident(dataset), quote_ident(table_name)]
+    )
+
+
+def watermark_table_fqn(args) -> str:
+    return table_fqn(args, getattr(args, "watermark_table", "ingestion_watermark_test"))
+
+
+def temp_view_name(full_table_name: str) -> str:
+    return full_table_name.replace("`", "").replace(".", "_") + "_view"
+
+
 def transactions_table_schema(include_error_reason: bool = False) -> StructType:
     fields = [
         StructField("transaction_id", StringType(), True),
@@ -190,35 +214,14 @@ def prepare_output_record(record: dict) -> dict:
     return prepared
 
 
-def table_exists(full_table_name: str) -> bool:
-    parts = full_table_name.split(".")
-
-    if len(parts) == 1:
-        return spark.catalog.tableExists(parts[0])
-
-    if len(parts) == 2:
-        schema_name, table_name = parts
-        return spark.catalog.tableExists(table_name, schema_name)
-
-    if len(parts) == 3:
-        catalog_name, schema_name, table_name = parts
-        rows = spark.sql(
-            f"SHOW TABLES IN `{catalog_name}`.`{schema_name}` LIKE '{table_name}'"
-        ).collect()
-        return any(row["tableName"] == table_name for row in rows)
-
-    raise ValueError(f"Unsupported table name: {full_table_name}")
-
-
 def load_existing_natural_keys(transactions_table: str) -> dict[str, set[str]]:
-    if not table_exists(transactions_table):
-        return {}
-
-    rows = spark.sql(f"""
+    rows = spark.sql(
+        f"""
         SELECT transaction_id, natural_key_hash
         FROM {transactions_table}
         WHERE natural_key_hash IS NOT NULL
-    """).collect()
+        """
+    ).collect()
 
     existing = {}
 
@@ -229,24 +232,17 @@ def load_existing_natural_keys(transactions_table: str) -> dict[str, set[str]]:
 
 
 def get_watermark(args):
-    full_table = f"{args.dataset}.{getattr(args, 'watermark_table', 'ingestion_watermark_test')}"
+    full_table = watermark_table_fqn(args)
 
-    spark.sql(f"""
-        CREATE TABLE IF NOT EXISTS {full_table} (
-            source_name STRING,
-            last_successful_transaction_date TIMESTAMP,
-            updated_at TIMESTAMP
-        )
-        USING DELTA
-    """)
-
-    rows = spark.sql(f"""
+    rows = spark.sql(
+        f"""
         SELECT last_successful_transaction_date
         FROM {full_table}
-        WHERE source_name = '{getattr(args, 'source_name', 'transactions')}'
+        WHERE source_name = {sql_string_literal(getattr(args, 'source_name', 'transactions'))}
         ORDER BY updated_at DESC
         LIMIT 1
-    """).collect()
+        """
+    ).collect()
 
     if not rows:
         return None
@@ -275,16 +271,7 @@ def update_watermark(args, valid_records: list[dict]):
         print("No valid records, watermark not updated")
         return
 
-    full_table = f"{args.dataset}.{getattr(args, 'watermark_table', 'ingestion_watermark_test')}"
-
-    spark.sql(f"""
-        CREATE TABLE IF NOT EXISTS {full_table} (
-            source_name STRING,
-            last_successful_transaction_date TIMESTAMP,
-            updated_at TIMESTAMP
-        )
-        USING DELTA
-    """)
+    full_table = watermark_table_fqn(args)
 
     max_tx_date = max(isoparse(r["transaction_date"]) for r in valid_records)
     if max_tx_date.tzinfo is None:
@@ -392,7 +379,7 @@ def iter_source_records(args, use_watermark: bool):
 
 
 def split_records(args, validator, use_watermark: bool):
-    transactions_table = f"{args.dataset}.{args.transactions_table}"
+    transactions_table = table_fqn(args, args.transactions_table)
     existing_natural_keys = load_existing_natural_keys(transactions_table)
 
     valid_records = []
@@ -451,34 +438,32 @@ def write_delta_merge(
         prepared_records,
         schema=transactions_table_schema(include_error_reason=include_error_reason),
     )
-    temp_view = full_table_name.replace(".", "_") + "_view"
+    temp_view = temp_view_name(full_table_name)
     df.createOrReplaceTempView(temp_view)
 
-    if not table_exists(full_table_name):
-        df.write.format("delta").mode("overwrite").saveAsTable(full_table_name)
-    else:
-        spark.sql(f"""
-            MERGE INTO {full_table_name} target
-            USING {temp_view} source
-            ON target.{merge_key} = source.{merge_key}
-            WHEN MATCHED THEN UPDATE SET *
-            WHEN NOT MATCHED THEN INSERT *
-        """)
+    spark.sql(
+        f"""
+        MERGE INTO {full_table_name} target
+        USING {temp_view} source
+        ON target.{merge_key} = source.{merge_key}
+        WHEN MATCHED THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *
+        """
+    )
 
     print(f"Wrote/merged {len(records)} records into {full_table_name}")
 
 
 def run_pipeline(args, use_watermark: bool):
     spark.conf.set("spark.sql.session.timeZone", "UTC")
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {args.dataset}")
 
     validator = load_validator(args.schema_file)
     valid_records, quarantine_records = split_records(
         args, validator, use_watermark=use_watermark
     )
 
-    transactions_table = f"{args.dataset}.{args.transactions_table}"
-    quarantine_table = f"{args.dataset}.{args.quarantine_table}"
+    transactions_table = table_fqn(args, args.transactions_table)
+    quarantine_table = table_fqn(args, args.quarantine_table)
 
     write_delta_merge(valid_records, transactions_table, "transaction_id")
     write_delta_merge(
@@ -507,6 +492,6 @@ def run_pipeline(args, use_watermark: bool):
     print(f"  Quarantine : {quarantine_table}")
 
     if use_watermark:
-        print(f"  Watermark  : {args.dataset}.{getattr(args, 'watermark_table', 'ingestion_watermark_test')}")
+        print(f"  Watermark  : {watermark_table_fqn(args)}")
 
     print("=========================================")
