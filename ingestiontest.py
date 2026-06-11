@@ -116,11 +116,29 @@ def natural_key_hash(record: dict) -> str:
 
 
 def table_exists(full_table_name: str) -> bool:
-    try:
-        spark.table(full_table_name)
-        return True
-    except Exception:
-        return False
+    """
+    Return True only if the catalog can resolve the table immediately.
+
+    `spark.table(...)` is lazy under Spark Connect, so it can appear to succeed
+    even when the table does not exist yet. Use the catalog metadata API instead.
+    """
+    parts = full_table_name.split(".")
+
+    if len(parts) == 1:
+        return spark.catalog.tableExists(parts[0])
+
+    if len(parts) == 2:
+        schema_name, table_name = parts
+        return spark.catalog.tableExists(table_name, schema_name)
+
+    if len(parts) == 3:
+        catalog_name, schema_name, table_name = parts
+        rows = spark.sql(
+            f"SHOW TABLES IN `{catalog_name}`.`{schema_name}` LIKE '{table_name}'"
+        ).collect()
+        return any(row["tableName"] == table_name for row in rows)
+
+    raise ValueError(f"Unsupported table name: {full_table_name}")
 
 
 def load_existing_natural_keys(transactions_table: str) -> dict[str, set[str]]:
