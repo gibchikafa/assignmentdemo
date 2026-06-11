@@ -21,7 +21,7 @@ from databricks.sdk.service.jobs import (
 DEFAULT_GIT_URL = "https://github.com/gibchikafa/assignmentdemo.git"
 DEFAULT_GIT_BRANCH = "main"
 DEFAULT_JOB_PREFIX = "assignmentdemo"
-DEFAULT_ENVIRONMENT_VERSION = "1"
+DEFAULT_ENVIRONMENT_VERSION = "5"
 DEFAULT_DEPENDENCIES = [
     "dlt==1.27.0",
     "pycountry==26.2.16",
