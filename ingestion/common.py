@@ -9,6 +9,7 @@ import pandas as pd
 import pycountry
 from dateutil.parser import isoparse
 from dlt.sources.rest_api import rest_api_source
+from dlt.sources.helpers.requests.retry import Client as RetryClient
 from jsonschema import Draft7Validator
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
@@ -26,6 +27,9 @@ from pyspark.sql.types import (
 
 
 API_BASE_URL = "https://fgbjekjqnbmtkmeewexb.supabase.co/rest/v1/"
+REST_REQUEST_MAX_ATTEMPTS = 5
+REST_REQUEST_BACKOFF_FACTOR = 1
+REST_REQUEST_MAX_RETRY_DELAY = 300
 spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
 
 NATURAL_KEY_COLUMNS = [
@@ -448,6 +452,13 @@ def supabase_transactions_source(
         op = "gte" if include_boundary else "gt"
         params["transaction_date"] = f"{op}.{start_value}"
 
+    retry_session = RetryClient(
+        raise_for_status=False,
+        request_max_attempts=REST_REQUEST_MAX_ATTEMPTS,
+        request_backoff_factor=REST_REQUEST_BACKOFF_FACTOR,
+        request_max_retry_delay=REST_REQUEST_MAX_RETRY_DELAY,
+    ).session
+
     return rest_api_source(
         {
             "client": {
@@ -456,6 +467,7 @@ def supabase_transactions_source(
                     "apikey": api_key,
                     "Authorization": f"Bearer {api_key}",
                 },
+                "session": retry_session,
             },
             "resources": [
                 {
