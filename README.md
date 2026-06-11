@@ -81,6 +81,34 @@ Or use the unified entrypoint:
 python3 entrypoint.py --pipeline incremental --source-type file --source-file transactions.csv
 ```
 
+## Algorithm
+
+### Task 1
+
+```text
+1. Read all source rows.
+2. Normalize each row to the final output shape.
+3. Validate the row against the JSON schema and extra domain checks.
+4. If validation fails, send the row to quarantine with an error reason.
+5. Build a natural key and hash for duplicate detection.
+6. Compare against rows already in bronze and rows seen in the current batch.
+7. Mark duplicates with is_duplicate = true.
+8. Write valid rows to workspace.bronze.transactions_test.
+9. Write invalid rows to workspace.bronze.quarantine_test.
+10. Advance the watermark to the latest successful transaction date.
+```
+
+### Task 3
+
+```text
+1. Read the saved watermark from workspace.bronze.ingestion_watermark_test.
+2. Compute the start boundary using --lookback-days (default 0).
+3. Filter the source so only rows newer than the boundary are processed.
+4. Run the same normalization, validation, quarantine, and duplicate steps as Task 1.
+5. Write valid and quarantine rows to the bronze tables.
+6. Advance the watermark after a successful load.
+```
+
 ## DDL
 
 If you need to recreate the tables, use `sql/bronze_tables.sql`. It creates the three Delta tables under `workspace.bronze`. The ingestion code assumes those tables already exist and does not create them at runtime.
