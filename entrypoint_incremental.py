@@ -1,6 +1,7 @@
 import sys
-sys.dont_write_bytecode = True
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 
 def add_repo_root_to_path() -> None:
@@ -27,14 +28,18 @@ def add_repo_root_to_path() -> None:
 
 add_repo_root_to_path()
 
-from ingestion.cli import build_parser
+from ingestion.cli import build_parser as build_ingestion_parser
 from ingestion.common import run_pipeline
 
 
-def main():
-    args = build_parser(include_incremental=False).parse_args()
-    run_pipeline(args, use_watermark=False)
+def build_parser():
+    return build_ingestion_parser(include_incremental=True)
+
+
+def parse_args():
+    return build_parser().parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    run_pipeline(args, use_watermark=True)

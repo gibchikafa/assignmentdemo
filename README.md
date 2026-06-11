@@ -4,10 +4,9 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 
 ## Layout
 
-- `ingestion/task1_ingest.py` - Task 1 entrypoint for full basic ingestion.
-- `ingestion/task3_incremental.py` - Task 3 entrypoint for incremental ingestion.
-- `entrypoint.py` - Unified Databricks entrypoint with `--pipeline basic|incremental|task2`.
-- `sql/task2_aggregation.py` - Task 2 entrypoint for the gold aggregation model.
+- `entrypoint.py` - Task 1 basic ingestion entrypoint.
+- `entrypoint_incremental.py` - Task 3 incremental ingestion entrypoint.
+- `entrypoint_summaries.py` - Task 2 daily summary entrypoint.
 - `ingestion/common.py` - Shared normalization, validation, duplicate detection, quarantine routing, watermark handling, and Delta merge logic.
 - `ingestion/cli.py` - Shared argument definitions for all ingestion entrypoints.
 - `ddl/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, and control tables.
@@ -16,6 +15,7 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 
 ## Implementation Summary
 
+- The public launchers are just the three root scripts above: one for basic ingestion, one for incremental ingestion, and one for the daily summaries.
 - The code assumes the target tables already exist in Unity Catalog under `workspace.bronze`.
 - The pipeline does not create schemas or tables at runtime.
 - The shared implementation keeps Task 1 and Task 3 behavior aligned, so the only real difference is whether watermark filtering is enabled.
@@ -24,7 +24,6 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 - Each successful run appends metadata to a run-log table so the submission has an auditable control trail.
 - All managed tables are prefixed with `gibson_eletrolux_` to keep the namespace isolated and unambiguous.
 - REST ingestion is modeled with `dlt`/dlthub so the source definition stays declarative: auth headers, pagination, retries, and incremental query parameters live in one place while the rest of the pipeline stays source-agnostic.
-- `entrypoint.py` defaults to Task 1/basic ingestion when `--pipeline` is omitted.
 - Task 2 is implemented as a single Spark SQL model rather than dbt because the assignment allows any transformation framework and the SQL file is easier to inspect and run directly in Databricks.
 
 ## Error Handling
@@ -65,13 +64,7 @@ Duplicate-handling strategy:
 - The code checks both the current batch and the already ingested bronze table so reruns and cross-batch duplicates are both caught.
 - Duplicate rows are still written with `is_duplicate = true` rather than being dropped, because the assignment asks for traceability rather than loss of records.
 
-Run it with the Task 1 script:
-
-```bash
-python3 ingestion/task1_ingest.py --source-type file --source-file transactions.csv
-```
-
-Or use the unified entrypoint:
+Run it with the Task 1 entrypoint:
 
 ```bash
 python3 entrypoint.py --source-type file --source-file transactions.csv
@@ -106,13 +99,7 @@ Transformation rules:
 Run the model with:
 
 ```bash
-python3 sql/task2_aggregation.py
-```
-
-Or use the unified entrypoint:
-
-```bash
-python3 entrypoint.py --pipeline task2
+python3 entrypoint_summaries.py
 ```
 
 To produce the assignment extract for January through March 2024, query the gold table after the model finishes:
@@ -139,16 +126,10 @@ Why this design:
 - The REST path uses `dlt`/dlthub so the API integration stays declarative. Pagination, headers, and the `transaction_date` filter live in `supabase_transactions_source`, which keeps source-specific concerns isolated from validation, duplicate handling, and Delta writes. That makes the REST source easier to extend or replace later without changing the pipeline core.
 - Task 3 inherits the same validation and duplicate logic as Task 1, so incremental behavior only changes which records are selected, not how each record is judged.
 
-Run it with the Task 3 script:
+Run it with the Task 3 entrypoint:
 
 ```bash
-python3 ingestion/task3_incremental.py --source-type file --source-file transactions.csv
-```
-
-Or use the unified entrypoint:
-
-```bash
-python3 entrypoint.py --pipeline incremental --source-type file --source-file transactions.csv
+python3 entrypoint_incremental.py --source-type file --source-file transactions.csv
 ```
 
 ## Algorithm
@@ -196,7 +177,7 @@ If you already created the old unpartitioned tables, drop and recreate them to a
 - `ddl/bronze_tables.sql` is for table setup or recreation, not for normal pipeline runs.
 - `sql/daily_account_summary.sql` is the Spark SQL model used by Task 2.
 - The Task 2 output table lives in `workspace.gold.daily_account_summary` by default.
-- `sql/` contains the Task 2 runner script and its SQL template.
+- `sql/` contains the Task 2 SQL template.
 
 ## Unit Tests
 

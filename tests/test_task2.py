@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from ingestion import common
-from sql import task2_aggregation
+import entrypoint_summaries
 
 
 def make_args(**overrides):
@@ -23,7 +23,7 @@ def squash_sql(sql: str) -> str:
 
 
 def test_task2_parser_defaults():
-    args = task2_aggregation.build_parser().parse_args([])
+    args = entrypoint_summaries.build_parser().parse_args([])
 
     assert args.source_type == "file"
     assert args.catalog == "workspace"
@@ -36,7 +36,7 @@ def test_task2_parser_defaults():
 
 
 def test_render_daily_account_summary_sql_includes_assignment_rules():
-    sql = task2_aggregation.render_daily_account_summary_sql(make_args())
+    sql = entrypoint_summaries.render_daily_account_summary_sql(make_args())
     rendered = squash_sql(sql).upper()
 
     assert "CREATE OR REPLACE TABLE" in rendered
@@ -57,7 +57,7 @@ def test_render_daily_account_summary_sql_includes_assignment_rules():
 def test_run_task2_creates_schema_and_executes_sql():
     common.spark.sql_queries[:] = []
 
-    task2_aggregation.run_task2(make_args())
+    entrypoint_summaries.run_task2(make_args())
 
     assert common.spark.sql_queries[0] == "CREATE SCHEMA IF NOT EXISTS `workspace`.`gold`"
     assert "CREATE OR REPLACE TABLE `workspace`.`gold`.`daily_account_summary`" in common.spark.sql_queries[1]

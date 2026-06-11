@@ -44,7 +44,7 @@ from ingestion.cli import add_common_args
 REPO_ROOT = find_repo_root()
 
 
-def add_task2_args(parser: argparse.ArgumentParser) -> None:
+def add_summary_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--output-dataset", default="gold")
     parser.add_argument("--output-table", default="daily_account_summary")
     parser.add_argument(
@@ -62,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Build the daily_account_summary gold table with Spark SQL."
     )
     add_common_args(parser)
-    add_task2_args(parser)
+    add_summary_args(parser)
     return parser
 
 
@@ -114,8 +114,12 @@ def run_task2(args) -> None:
     print("=========================================")
 
 
+def parse_args():
+    return build_parser().parse_args()
+
+
 def main() -> None:
-    args = build_parser().parse_args()
+    args = parse_args()
     run_task2(args)
 
 
