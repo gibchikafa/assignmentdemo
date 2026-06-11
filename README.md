@@ -159,7 +159,7 @@ Run it with the Task 3 entrypoint:
 python3 entrypoint_incremental.py --source-type file --source-file transactions.csv
 ```
 
-## Algorithm
+## Algorithm Summary
 
 ### Task 1
 
@@ -189,54 +189,10 @@ python3 entrypoint_incremental.py --source-type file --source-file transactions.
 7. Append run metadata to workspace.bronze.gibson_eletrolux_ingestion_run_log_test.
 ```
 
-## DDL
-
-If you need to recreate the tables, use `ddl/bronze_tables.sql`. It creates the four Delta tables under `workspace.bronze` with the `gibson_eletrolux_` prefix. The ingestion code assumes those tables already exist and does not create them at runtime.
-If you already created the old unpartitioned tables, drop and recreate them to apply the new partitioning and the run-log table.
-
-## Notes
-
-- Duplicate handling is implemented as flagging, not deduplication.
-- The ingestion timestamp and watermark timestamps are written as UTC timestamps.
-- Default target tables are fully qualified as `workspace.bronze.<table>` unless you override `--catalog` or `--dataset`.
-- The run-log table captures batch metadata such as counts, watermark value, and status.
-- Default `--source-file` and `--schema-file` values point at the repo root; relative overrides are also resolved against the repo root if needed.
-- `ddl/bronze_tables.sql` is for table setup or recreation, not for normal pipeline runs.
-- `sql/daily_account_summary.sql` is the Spark SQL model used by Task 2.
-- The Task 2 output table lives in `workspace.gold.daily_account_summary` by default.
-- `sql/` contains the Task 2 SQL template.
-
 ## Unit Tests
-
-The repository includes a small pytest suite that checks the parts of the implementation most likely to regress:
-
-- CLI defaults for Task 1, Task 3, and the unified entrypoint
-- schema loading and record normalization/validation
-- file source CSV/Excel reading and repo-root resolution
-- watermark lookback logic in hours
-- duplicate-detection pipeline structure
-- REST source configuration and incremental boundary pushdown
-- Delta merge and control-table write side effects
-- Task 2 SQL rendering and Spark SQL execution path
 
 Run the suite locally with:
 
 ```bash
 pytest -q
-```
-
-## Databricks Jobs
-
-`create_databricks_jobs.py` provisions the three Git-backed Databricks jobs in one call:
-
-- basic ingestion -> `entrypoint.py`
-- incremental ingestion -> `entrypoint_incremental.py`
-- summaries -> `entrypoint_summaries.py`
-
-It uses your default Databricks auth configuration through `WorkspaceClient()`. If needed, set `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, or `DATABRICKS_CONFIG_PROFILE` before running it.
-
-Example:
-
-```bash
-python3 create_databricks_jobs.py
 ```
