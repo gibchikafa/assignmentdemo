@@ -256,6 +256,52 @@ def latest_included_source_watermark(
     return watermark
 
 
+def summary_row_count(
+    args,
+    start_value: str | None = None,
+    include_boundary: bool = True,
+) -> int:
+    source_table_fqn = common.table_fqn(args, args.transactions_table)
+    quarantine_table_fqn = common.table_fqn(args, args.quarantine_table)
+    comparison_operator = ">=" if include_boundary else ">"
+
+    where_clauses = [
+        "source.status = 'completed'",
+        "COALESCE(source.is_duplicate, false) = false",
+    ]
+    if start_value is not None:
+        where_clauses.append(
+            f"source.transaction_date {comparison_operator} to_timestamp('{start_value}')"
+        )
+
+    rows = common.spark.sql(
+        f"""
+        SELECT COUNT(*) AS computed_rows
+        FROM (
+            SELECT
+                source.account_id,
+                CAST(source.transaction_date AS DATE) AS transaction_date
+            FROM {source_table_fqn} source
+            LEFT ANTI JOIN {quarantine_table_fqn} quarantine
+                ON source.transaction_id = quarantine.transaction_id
+            WHERE {" AND ".join(where_clauses)}
+            GROUP BY source.account_id, CAST(source.transaction_date AS DATE)
+        ) summary_keys
+        """
+    ).collect()
+
+    if not rows:
+        return 0
+
+    row = rows[0]
+    if isinstance(row, dict):
+        computed_rows = row.get("computed_rows")
+    else:
+        computed_rows = getattr(row, "computed_rows", None)
+
+    return int(computed_rows or 0)
+
+
 def summary_start_value(watermark, lookback_hours: int) -> str:
     start = watermark - timedelta(hours=lookback_hours)
     return start.isoformat().replace("+00:00", "Z")
@@ -273,6 +319,7 @@ def run_task2(args) -> None:
     if watermark is None:
         common.spark.sql(render_daily_account_summary_sql(args))
         watermark = latest_included_source_watermark(args)
+        rows_computed = summary_row_count(args)
         mode = "Spark SQL bootstrap full refresh"
     else:
         start_value = summary_start_value(
@@ -288,6 +335,11 @@ def run_task2(args) -> None:
             )
         )
         watermark = latest_included_source_watermark(
+            args,
+            start_value=start_value,
+            include_boundary=include_boundary,
+        )
+        rows_computed = summary_row_count(
             args,
             start_value=start_value,
             include_boundary=include_boundary,
@@ -311,6 +363,7 @@ def run_task2(args) -> None:
     print(f"Output table  : {output_table_fqn(args)}")
     print(f"Watermark     : {summary_watermark_table_fqn(args)}")
     print(f"Mode          : {mode}")
+    print(f"Rows computed : {rows_computed}")
     print("=========================================")
 
 

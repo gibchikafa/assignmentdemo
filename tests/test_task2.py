@@ -84,12 +84,14 @@ def test_run_task2_bootstraps_when_summary_watermark_is_missing():
     summary_watermark_result = common.spark.createDataFrame(
         [{"max_transaction_date": datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc)}]
     )
+    row_count_result = common.spark.createDataFrame([{"computed_rows": 7}])
     common.spark.created_dataframes[:] = []
     common.spark.sql_results[:] = [
         create_schema_result,
         watermark_lookup_result,
         common.spark.createDataFrame([]),
         summary_watermark_result,
+        row_count_result,
     ]
 
     entrypoint_summaries.run_task2(make_args())
@@ -124,12 +126,14 @@ def test_run_task2_uses_incremental_merge_when_summary_watermark_exists():
     summary_watermark_result = common.spark.createDataFrame(
         [{"max_transaction_date": datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc)}]
     )
+    row_count_result = common.spark.createDataFrame([{"computed_rows": 3}])
     common.spark.created_dataframes[:] = []
     common.spark.sql_results[:] = [
         create_schema_result,
         watermark_lookup_result,
         common.spark.createDataFrame([]),
         summary_watermark_result,
+        row_count_result,
     ]
 
     entrypoint_summaries.run_task2(make_args())
@@ -144,9 +148,10 @@ def test_run_task2_uses_incremental_merge_when_summary_watermark_exists():
         "SELECT MAX(SOURCE.TRANSACTION_DATE) AS MAX_TRANSACTION_DATE"
         in common.spark.sql_queries[3].upper()
     )
+    assert "COMPUTED_ROWS" in common.spark.sql_queries[4].upper()
 
 
-def test_run_task2_incremental_with_no_new_data_keeps_existing_summary_state():
+def test_run_task2_incremental_with_no_new_data_keeps_existing_summary_state(capsys):
     common.spark.sql_queries[:] = []
     create_schema_result = common.spark.createDataFrame([])
     watermark_lookup_result = common.spark.createDataFrame(
@@ -158,15 +163,20 @@ def test_run_task2_incremental_with_no_new_data_keeps_existing_summary_state():
             }
         ]
     )
-    no_new_data_result = common.spark.createDataFrame([])
+    summary_watermark_result = common.spark.createDataFrame([])
+    row_count_result = common.spark.createDataFrame([{"computed_rows": 0}])
     common.spark.created_dataframes[:] = []
     common.spark.sql_results[:] = [
         create_schema_result,
         watermark_lookup_result,
-        no_new_data_result,
+        common.spark.createDataFrame([]),
+        summary_watermark_result,
+        row_count_result,
     ]
 
     entrypoint_summaries.run_task2(make_args())
+
+    captured = capsys.readouterr().out
 
     assert common.spark.sql_queries[0] == "CREATE SCHEMA IF NOT EXISTS `workspace`.`gold`"
     assert (
@@ -178,4 +188,6 @@ def test_run_task2_incremental_with_no_new_data_keeps_existing_summary_state():
     assert common.spark.sql_queries[3].strip().upper().startswith(
         "SELECT MAX(SOURCE.TRANSACTION_DATE) AS MAX_TRANSACTION_DATE"
     )
-    assert common.spark.created_dataframes == []
+    assert "COMPUTED_ROWS" in common.spark.sql_queries[4].upper()
+    assert "Rows computed : 0" in captured
+    assert all(df.saved_table is None for df in common.spark.created_dataframes)
