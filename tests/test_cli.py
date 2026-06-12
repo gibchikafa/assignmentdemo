@@ -67,3 +67,4 @@ def test_summaries_entrypoint_defaults(monkeypatch):
     assert args.dataset == "bronze"
     assert args.output_dataset == "gold"
     assert args.output_table == "daily_account_summary"
+    assert args.summary_watermark_table == "gibson_eletrolux_daily_summary_watermark_test"

@@ -1,8 +1,5 @@
-CREATE OR REPLACE TABLE {output_table_fqn}
-USING DELTA
-PARTITIONED BY (transaction_date)
-AS
-WITH filtered_transactions AS (
+{statement_prefix}
+WITH {changed_keys_cte}filtered_transactions AS (
     SELECT
         source.account_id,
         CAST(source.transaction_date AS DATE) AS transaction_date,
@@ -13,10 +10,12 @@ WITH filtered_transactions AS (
         source.merchant_category,
         source.ingestion_timestamp
     FROM {source_table_fqn} source
+{filtered_transactions_source_join}
     LEFT ANTI JOIN {quarantine_table_fqn} quarantine
         ON source.transaction_id = quarantine.transaction_id
     WHERE source.status = 'completed'
       AND COALESCE(source.is_duplicate, false) = false
+{source_date_clause}
 ),
 daily_account_totals AS (
     SELECT
@@ -92,3 +91,4 @@ LEFT JOIN ranked_categories
     ON totals.account_id = ranked_categories.account_id
    AND totals.transaction_date = ranked_categories.transaction_date
    AND ranked_categories.category_rank = 1
+{statement_suffix}

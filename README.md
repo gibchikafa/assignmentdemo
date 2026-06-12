@@ -10,7 +10,7 @@ This repository implements Task 1, Task 2, and Task 3 with a shared ingestion co
 - `create_databricks_jobs.py` - Helper that creates the three Databricks jobs from the SDK.
 - `ingestion/common.py` - Shared normalization, validation, duplicate detection, quarantine routing, watermark handling, and Delta merge logic.
 - `ingestion/cli.py` - Shared argument definitions for all ingestion entrypoints.
-- `ddl/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, and control tables.
+- `ddl/bronze_tables.sql` - Unity Catalog DDL for the precreated raw, quarantine, watermark, control, and summary watermark tables.
 - `sql/daily_account_summary.sql` - Spark SQL template for the Task 2 gold model.
 - `outputs/` - Submission artifacts such as quarantine samples and watermark snapshots.
 
@@ -23,6 +23,8 @@ Run the project in this order:
 3. Run the basic ingestion job first and wait for it to finish.
 4. Run the incremental ingestion job next.
 5. Run the summaries job last.
+
+The summaries job bootstraps the gold table on its first run and then MERGEs only the changed account/date rows on later runs.
 
 The three root entrypoints are:
 
@@ -50,7 +52,8 @@ This flow was tested in Databricks Community Edition using the same Git-backed j
 - Each successful run appends metadata to a run-log table so the submission has an auditable control trail.
 - All managed tables are prefixed with `gibson_eletrolux_` to keep the namespace isolated and unambiguous.
 - REST ingestion is modeled with `dlt`/dlthub so the source definition stays declarative: auth headers, pagination, retries, and incremental query parameters live in one place while the rest of the pipeline stays source-agnostic.
-- Task 2 is implemented as a single Spark SQL model rather than dbt because the assignment allows any transformation framework and the SQL file is easier to inspect and run directly in Databricks.
+- Task 2 is implemented as Spark SQL rather than dbt because the assignment allows any transformation framework and the SQL files are easier to inspect and run directly in Databricks.
+- The first Task 2 run bootstraps the gold table, then later runs use a summary watermark table in `workspace.gold` to MERGE only the newly affected account/date rows.
 
 ## Error Handling
 
@@ -103,8 +106,8 @@ Task 2 is implemented as a Spark SQL gold model that reads the validated bronze 
 Why this design:
 
 - It satisfies the assignment without introducing dbt-specific project structure or conventions that are unnecessary for a single transformation.
-- The logic stays in one SQL file, which makes the transformation easy to inspect, test, and rerun in Databricks.
-- The model is idempotent because it uses `CREATE OR REPLACE TABLE` and computes `updated_at` from source data instead of `CURRENT_TIMESTAMP()`.
+- The logic stays in one SQL template that the entrypoint renders as either a bootstrap `CREATE OR REPLACE TABLE` or an incremental `MERGE INTO`, which keeps the two modes easy to inspect, test, and rerun in Databricks.
+- The first run bootstraps the table with `CREATE OR REPLACE TABLE`; later runs reuse a summary watermark table in `workspace.gold` so only newly affected account/date rows are recomputed and merged.
 - Partitioning by `transaction_date` matches the primary access pattern for daily summaries and keeps date-range reads efficient.
 - The query depends only on the bronze transaction table and the quarantine table, so it stays isolated from ingestion concerns.
 
@@ -123,6 +126,8 @@ Transformation rules:
 - `updated_at` is the latest `ingestion_timestamp` among the contributing rows, which keeps reruns stable.
 
 The assignment text defines `updated_at` as the time the row was last computed in UTC. This implementation uses the latest source `ingestion_timestamp` instead so the model stays deterministic across reruns and matches the rest of the pipeline's data-driven timestamp handling.
+
+The incremental Task 2 path keeps its own watermark in `workspace.gold.gibson_eletrolux_daily_summary_watermark_test` because the bronze ingestion watermark advances independently. That lets the summary job process only newly arrived bronze data after Task 3 has run.
 
 Run the model with:
 
@@ -154,6 +159,7 @@ Why this design:
 - The REST path uses `dlt`/dlthub so the API integration stays declarative. Pagination, headers, and the `transaction_date` filter live in `supabase_transactions_source`, which keeps source-specific concerns isolated from validation, duplicate handling, and Delta writes. That makes the REST source easier to extend or replace later without changing the pipeline core.
 - Task 3 inherits the same validation and duplicate logic as Task 1, so incremental behavior only changes which records are selected, not how each record is judged.
 - For file sources, a rerun after the basic load is idempotent for already-processed rows. Parsed dates are advanced through the watermark, and rows already written to bronze or quarantine are skipped even if their `transaction_date` is malformed and cannot be compared to the watermark.
+- Task 2 runs after Task 3 and uses its own summary checkpoint so it only recomputes the account/date groups touched by newly ingested bronze rows.
 
 Run it with the Task 3 entrypoint:
 

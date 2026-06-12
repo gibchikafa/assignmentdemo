@@ -65,3 +65,9 @@ CREATE TABLE IF NOT EXISTS workspace.bronze.gibson_eletrolux_ingestion_run_log_t
   status STRING
 )
 USING DELTA;
+
+CREATE TABLE IF NOT EXISTS workspace.gold.gibson_eletrolux_daily_summary_watermark_test (
+  last_successful_transaction_date TIMESTAMP,
+  updated_at TIMESTAMP
+)
+USING DELTA;
